@@ -115,6 +115,12 @@ class CityscapesInstanceEvaluator(CityscapesEvaluator):
 
         ret = OrderedDict()
         ret["segm"] = {"AP": results["allAp"] * 100, "AP50": results["allAp50%"] * 100}
+        # add per-class AP
+        ret["segm_AP"] = {}
+        ret["segm_AP50"] = {}
+        for category in results["classes"]:
+            ret["segm_AP"][category] = results["classes"][category]["ap"] * 100
+            ret["segm_AP50"][category] = results["classes"][category]["ap50%"] * 100
         self._working_dir.cleanup()
         return ret
 

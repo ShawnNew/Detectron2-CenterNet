@@ -1,0 +1,21 @@
+_BASE_: "../Base-RetinaNet.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  RESNETS:
+    DEPTH: 50
+  RETINANET:
+    NUM_CLASSES: 9
+DATASETS:
+  TRAIN: ("scale_20190827_train_9", "scale_20191209_20200317_train_9", "coco_2017_train_9")
+  TEST: ("scale_20190827_val_9", "scale_20191209_20200317_val_9")
+  # 89168 images in total
+  # default 8-gpu config with around 12 epochs training
+SOLVER:
+  IMS_PER_BATCH: 16
+  BASE_LR: 0.01
+  STEPS: (60000, 80000)
+  MAX_ITER: 90000
+  # CHECKPOINT_PERIOD: 5000
+TEST:
+  EVAL_PERIOD: 10000
+  # validation every epoch
