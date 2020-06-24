@@ -449,6 +449,19 @@ _C.MODEL.RETINANET.SMOOTH_L1_LOSS_BETA = 0.1
 
 
 # ---------------------------------------------------------------------------- #
+# CenterNet
+# ---------------------------------------------------------------------------- #
+_C.MODEL.CENTERNET = CN()
+_C.MODEL.CENTERNET.DOWN_RATIO = 4
+_C.MODEL.CENTERNET.LAST_LEVEL = 5
+_C.MODEL.CENTERNET.HEAD_CONV = 256
+_C.MODEL.CENTERNET.FINAL_KERNEL = 1
+_C.MODEL.CENTERNET.TASK = CN()
+_C.MODEL.CENTERNET.TASK.HM = 80
+_C.MODEL.CENTERNET.TASK.WH = 2
+_C.MODEL.CENTERNET.TASK.REG = 2
+
+# ---------------------------------------------------------------------------- #
 # ResNe[X]t options (ResNets = {ResNet, ResNeXt}
 # Note that parts of a resnet may be used for both the backbone and the head
 # These options apply to both

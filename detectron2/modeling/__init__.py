@@ -11,6 +11,7 @@ from .backbone import (
     build_backbone,
     build_resnet_backbone,
     make_stage,
+    dla34
 )
 from .meta_arch import (
     META_ARCH_REGISTRY,
@@ -19,6 +20,7 @@ from .meta_arch import (
     PanopticFPN,
     ProposalNetwork,
     RetinaNet,
+    CenterNet,
     SemanticSegmentor,
     build_model,
     build_sem_seg_head,
