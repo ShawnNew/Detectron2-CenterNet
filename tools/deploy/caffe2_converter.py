@@ -67,7 +67,7 @@ if __name__ == "__main__":
         # draw the caffe2 graph
         caffe2_model.save_graph(os.path.join(args.output, "model.svg"), inputs=first_batch)
     elif args.format == "onnx":
-        onnx_model = tracer.export_onnx()
+        traceable_model, onnx_model = tracer.export_onnx()
         onnx.save(onnx_model, os.path.join(args.output, "model.onnx"))
     elif args.format == "torchscript":
         script_model = tracer.export_torchscript()
@@ -88,10 +88,15 @@ if __name__ == "__main__":
 
     # run evaluation with the converted model
     if args.run_eval:
-        assert args.format == "caffe2", "Python inference in other format is not yet supported."
+        if args.format == "onnx":
+            model = traceable_model
+        else:
+            model = caffe2_model
+            assert args.format == "caffe2", "Python inference in other format is not yet supported."
+        logger.info("Inference traceable model\n{}".format(str(model)))
         dataset = cfg.DATASETS.TEST[0]
         data_loader = build_detection_test_loader(cfg, dataset)
         # NOTE: hard-coded evaluator. change to the evaluator for your dataset
         evaluator = COCOEvaluator(dataset, cfg, True, args.output)
-        metrics = inference_on_dataset(caffe2_model, data_loader, evaluator)
+        metrics = inference_on_dataset(model, data_loader, evaluator)
         print_csv_format(metrics)

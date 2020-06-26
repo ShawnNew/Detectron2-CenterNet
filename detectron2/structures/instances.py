@@ -36,6 +36,8 @@ class Instances:
             image_size (height, width): the spatial size of the image.
             kwargs: fields to add to this `Instances`.
         """
+        # convert tensor as a standard Python number
+        image_size = tuple([x.item() if isinstance(x, torch.Tensor) else x for x in image_size])
         self._image_size = image_size
         self._fields: Dict[str, Any] = {}
         for k, v in kwargs.items():

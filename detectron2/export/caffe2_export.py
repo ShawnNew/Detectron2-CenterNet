@@ -57,8 +57,10 @@ def export_onnx_model(model, inputs):
                 model,
                 inputs,
                 f,
-                operator_export_type=OperatorExportTypes.ONNX_ATEN_FALLBACK,
-                # verbose=True,  # NOTE: uncomment this for debugging
+                operator_export_type=OperatorExportTypes.ONNX,
+                verbose=True,  # NOTE: uncomment this for debugging
+                opset_version=11,
+                keep_initializers_as_inputs=True,
                 # export_params=True,
             )
             onnx_model = onnx.load_from_string(f.getvalue())
