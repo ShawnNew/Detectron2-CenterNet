@@ -3,12 +3,14 @@
 import argparse
 import os
 import onnx
+import torch
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import build_detection_test_loader
 from detectron2.evaluation import COCOEvaluator, inference_on_dataset, print_csv_format
 from detectron2.export import Caffe2Tracer, add_export_config
+from detectron2.export.tensorrt import META_ARCH_TENSORRT_EXPORT_TYPE_MAP
 from detectron2.modeling import build_model
 from detectron2.utils.env import TORCH_VERSION
 from detectron2.utils.logger import setup_logger
@@ -31,7 +33,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert a model using caffe2 tracing.")
     parser.add_argument(
         "--format",
-        choices=["caffe2", "onnx", "torchscript"],
+        choices=["caffe2", "onnx", "torchscript", "tensorrt"],
         help="output format",
         default="caffe2",
     )
@@ -69,6 +71,7 @@ if __name__ == "__main__":
     elif args.format == "onnx":
         traceable_model, onnx_model = tracer.export_onnx()
         onnx.save(onnx_model, os.path.join(args.output, "model.onnx"))
+        del onnx_model
     elif args.format == "torchscript":
         script_model = tracer.export_torchscript()
         script_model.save(os.path.join(args.output, "model.ts"))
@@ -86,10 +89,21 @@ if __name__ == "__main__":
         with open(os.path.join(args.output, "model.txt"), "w") as f:
             f.write(str(script_model))
 
+    # GC
+    del first_batch
+    del data_loader
+    del tracer
+    del torch_model
+    torch.cuda.empty_cache()
+
     # run evaluation with the converted model
     if args.run_eval:
         if args.format == "onnx":
             model = traceable_model
+        elif args.format == "tensorrt":
+            MetaArch = META_ARCH_TENSORRT_EXPORT_TYPE_MAP[cfg.MODEL.META_ARCHITECTURE]
+            model = MetaArch(cfg, os.path.join(args.output, "model.trt"))
+            model.to(torch.device(cfg.MODEL.DEVICE))
         else:
             model = caffe2_model
             assert args.format == "caffe2", "Python inference in other format is not yet supported."

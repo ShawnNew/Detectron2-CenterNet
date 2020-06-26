@@ -30,6 +30,7 @@ __all__ = [
     "RandomRotation",
     "Resize",
     "ResizeShortestEdge",
+    "ResizeLetterBox",
 ]
 
 
@@ -165,6 +166,42 @@ class ResizeShortestEdge(TransformGen):
             neww = neww * scale
         neww = int(neww + 0.5)
         newh = int(newh + 0.5)
+        return ResizeTransform(h, w, newh, neww, self.interp)
+
+
+class ResizeLetterBox(TransformGen):
+    """
+    Scale the image height to the given size, with a limit of `max_width` on the image width.
+    If `max_width` is reached, then downscale so that the image height does not exceed max_height.
+    """
+
+    def __init__(
+        self, max_height, max_width, sample_style="choice", interp=Image.BILINEAR
+    ):
+        """
+        Args:
+            max_height (list[int]): If ``sample_style=="range"``,
+                a [min, max] interval from which to sample the shortest edge length.
+                If ``sample_style=="choice"``, a list of shortest edge lengths to sample from.
+            max_width (int): maximum allowed longest edge length.
+            sample_style (str): either "range" or "choice".
+        """
+        super().__init__()
+        assert sample_style in ["choice"], sample_style
+
+        if isinstance(max_height, tuple):
+            max_height = max_height[0]
+        self._init(locals())
+
+    def get_transform(self, img):
+        h, w = img.shape[:2]
+
+        if self.max_height == 0:
+            return NoOpTransform()
+
+        scale = min(self.max_height * 1.0 / h, self.max_width * 1.0 / w)
+        newh = int(h * scale + 0.5)
+        neww = int(w * scale + 0.5)
         return ResizeTransform(h, w, newh, neww, self.interp)
 
 

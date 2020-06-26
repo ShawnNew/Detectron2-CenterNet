@@ -128,7 +128,8 @@ class Caffe2Tracer:
         model = MetaArch(self.cfg, copy.deepcopy(self.model))
         inputs = model.convert_inputs(self.inputs)
         with trace_context(model):
-            onnx_model = export_onnx_model_impl(model, (inputs,))
+            onnx_model = export_onnx_model_impl(model, (inputs,), input_names=model.get_input_names(),
+                                                output_names=model.get_output_names())
         return model, onnx_model
 
     def export_torchscript(self):

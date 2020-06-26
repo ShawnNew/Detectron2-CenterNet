@@ -30,13 +30,15 @@ from .shared import (
 logger = logging.getLogger(__name__)
 
 
-def export_onnx_model(model, inputs):
+def export_onnx_model(model, inputs, input_names=None, output_names=None):
     """
     Trace and export a model to onnx format.
 
     Args:
         model (nn.Module):
         inputs (tuple[args]): the model will be called by `model(*inputs)`
+        input_names (str):
+        output_names (str):
 
     Returns:
         an onnx model
@@ -61,9 +63,14 @@ def export_onnx_model(model, inputs):
                 verbose=True,  # NOTE: uncomment this for debugging
                 opset_version=11,
                 keep_initializers_as_inputs=True,
+                input_names=input_names,
+                output_names=output_names,
                 # export_params=True,
             )
             onnx_model = onnx.load_from_string(f.getvalue())
+
+    # Skip ONNX's Optimization
+    return onnx_model
 
     # Apply ONNX's Optimization
     all_passes = onnx.optimizer.get_available_passes()

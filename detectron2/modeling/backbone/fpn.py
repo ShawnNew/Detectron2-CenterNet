@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import math
 import fvcore.nn.weight_init as weight_init
+import torch
 import torch.nn.functional as F
 from torch import nn
 
@@ -128,7 +129,11 @@ class FPN(Backbone):
         for features, lateral_conv, output_conv in zip(
             x[1:], self.lateral_convs[1:], self.output_convs[1:]
         ):
-            top_down_features = F.interpolate(prev_features, scale_factor=2, mode="nearest")
+            if torch.onnx.is_in_onnx_export():
+                resize_shape = torch.tensor(prev_features.size()[-2:]) * 2
+                top_down_features = F.interpolate(prev_features, size=tuple(resize_shape), mode="nearest")
+            else:
+                top_down_features = F.interpolate(prev_features, scale_factor=2, mode="nearest")
             lateral_features = lateral_conv(features)
             prev_features = lateral_features + top_down_features
             if self._fuse_type == "avg":

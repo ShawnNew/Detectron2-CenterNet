@@ -49,7 +49,8 @@ class ImageList(object):
 
     @staticmethod
     def from_tensors(
-        tensors: Sequence[torch.Tensor], size_divisibility: int = 0, pad_value: float = 0.0
+        tensors: Sequence[torch.Tensor], size_divisibility: int = 0, pad_value: float = 0.0,
+        max_height: int = 0, max_width: int = 0
     ) -> "ImageList":
         """
         Args:
@@ -60,6 +61,8 @@ class ImageList(object):
                 the common height and width is divisible by `size_divisibility`.
                 This depends on the model and many models need a divisibility of 32.
             pad_value (float): value to pad
+            max_height (int):
+            max_width (int):
 
         Returns:
             an `ImageList`.
@@ -90,6 +93,13 @@ class ImageList(object):
             stride = size_divisibility
             # the last two dims are H,W, both subject to divisibility requirement
             max_size = torch.cat([max_size[:-2], (max_size[-2:] + (stride - 1)) // stride * stride])
+
+            if max_height > 0 and max_width > 0:
+                h, w = max_size[-2:]
+                max_height = (max_height + (stride - 1)) // stride * stride
+                max_width = (max_width + (stride - 1)) // stride * stride
+                assert h <= max_height and w <= max_width
+                max_size = torch.cat([max_size[:-2], torch.tensor([max_height, max_width])])
 
         image_sizes = [tuple(im.shape[-2:]) for im in tensors]
 

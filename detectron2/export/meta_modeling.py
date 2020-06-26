@@ -76,10 +76,10 @@ class MetaModel(torch.nn.Module):
 class RetinaNetModel(MetaModel):
 
     def __init__(self, cfg, torch_model, trace_mode=False):
-        assert isinstance(torch_model, meta_arch.RetinaNet)
         super(RetinaNetModel, self).__init__(cfg, torch_model, trace_mode)
 
     def convert_inputs(self, batched_inputs):
+        assert isinstance(self._wrapped_model, meta_arch.RetinaNet)
         images = self._wrapped_model.preprocess_image(batched_inputs)
         return {
             "images": images.tensor,
@@ -87,6 +87,7 @@ class RetinaNetModel(MetaModel):
         }
 
     def convert_outputs(self, batched_inputs, inputs, results):
+        assert isinstance(self._wrapped_model, meta_arch.RetinaNet)
         image_sizes = inputs["image_sizes"]
 
         num_features = len([x for x in results.keys() if x.startswith("box_cls_")])
@@ -103,16 +104,28 @@ class RetinaNetModel(MetaModel):
         return meta_arch.GeneralizedRCNN._postprocess(results, batched_inputs, image_sizes)
 
     def inference(self, inputs):
+        assert isinstance(self._wrapped_model, meta_arch.RetinaNet)
         images = inputs["images"]
         features = self._wrapped_model.backbone(images)
         features = [features[f] for f in self._wrapped_model.in_features]
         pred_logits, pred_anchor_deltas = self._wrapped_model.head(features)
 
-        results = {}
+        results = {"image_sizes": inputs["image_sizes"]}
         for i, (box_cls_i, box_delta_i) in enumerate(zip(pred_logits, pred_anchor_deltas)):
             results["box_cls_{}".format(i)] = box_cls_i
             results["box_delta_{}".format(i)] = box_delta_i
         return results
+
+    def get_input_names(self):
+        return ["images", "image_sizes"]
+
+    def get_output_names(self):
+        num_features = 5
+        output_names = []
+        for i in range(num_features):
+            output_names.append("box_cls_{}".format(i))
+            output_names.append("box_delta_{}".format(i))
+        return ["image_sizes"] + output_names
 
 
 @contextlib.contextmanager

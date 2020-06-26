@@ -57,6 +57,9 @@ class RetinaNet(nn.Module):
         # Vis parameters
         self.vis_period               = cfg.VIS_PERIOD
         self.input_format             = cfg.INPUT.FORMAT
+        # Dynamic parameters
+        self.input                    = cfg.INPUT
+        self.dynamic                  = cfg.INPUT.DYNAMIC
         # fmt: on
 
         self.backbone = build_backbone(cfg)
@@ -369,7 +372,18 @@ class RetinaNet(nn.Module):
         """
         images = [x["image"].to(self.device) for x in batched_inputs]
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
-        images = ImageList.from_tensors(images, self.backbone.size_divisibility)
+        if self.dynamic:
+            images = ImageList.from_tensors(images, self.backbone.size_divisibility)
+        else:
+            if self.training:
+                min_size = self.input.MIN_SIZE_TRAIN
+                max_size = self.input.MAX_SIZE_TRAIN
+            else:
+                min_size = self.input.MIN_SIZE_TEST
+                max_size = self.input.MAX_SIZE_TEST
+            min_size = min_size[0] if isinstance(min_size, tuple) else min_size
+            images = ImageList.from_tensors(images, self.backbone.size_divisibility,
+                                            max_height=min_size, max_width=max_size)
         return images
 
 
