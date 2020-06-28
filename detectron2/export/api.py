@@ -13,7 +13,7 @@ from .caffe2_export import export_onnx_model as export_onnx_model_impl
 from .caffe2_export import run_and_save_graph
 from .caffe2_inference import ProtobufDetectionModel
 from .caffe2_modeling import META_ARCH_CAFFE2_EXPORT_TYPE_MAP, convert_batched_inputs_to_c2_format
-from .meta_modeling import META_ARCH_ONNX_EXPORT_TYPE_MAP, trace_context
+from .meta_modeling import META_ARCH_ONNX_EXPORT_TYPE_MAP, trace_context, remove_copy_between_cpu_and_gpu
 from .shared import get_pb_arg_vali, get_pb_arg_vals, save_graph
 
 __all__ = [
@@ -130,7 +130,7 @@ class Caffe2Tracer:
         with trace_context(model):
             onnx_model = export_onnx_model_impl(model, (inputs,), input_names=model.get_input_names(),
                                                 output_names=model.get_output_names())
-        return model, onnx_model
+        return model, remove_copy_between_cpu_and_gpu(onnx_model)
 
     def export_torchscript(self):
         """

@@ -35,6 +35,9 @@ class GeneralizedRCNN(nn.Module):
         self.roi_heads = build_roi_heads(cfg, self.backbone.output_shape())
         self.vis_period = cfg.VIS_PERIOD
         self.input_format = cfg.INPUT.FORMAT
+        # Dynamic parameters
+        self.input = cfg.INPUT
+        self.dynamic = cfg.INPUT.DYNAMIC
 
         assert len(cfg.MODEL.PIXEL_MEAN) == len(cfg.MODEL.PIXEL_STD)
         self.register_buffer("pixel_mean", torch.Tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1))
@@ -176,7 +179,18 @@ class GeneralizedRCNN(nn.Module):
         """
         images = [x["image"].to(self.device) for x in batched_inputs]
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
-        images = ImageList.from_tensors(images, self.backbone.size_divisibility)
+        if self.dynamic:
+            images = ImageList.from_tensors(images, self.backbone.size_divisibility)
+        else:
+            if self.training:
+                min_size = self.input.MIN_SIZE_TRAIN
+                max_size = self.input.MAX_SIZE_TRAIN
+            else:
+                min_size = self.input.MIN_SIZE_TEST
+                max_size = self.input.MAX_SIZE_TEST
+            min_size = min_size[0] if isinstance(min_size, tuple) else min_size
+            images = ImageList.from_tensors(images, self.backbone.size_divisibility,
+                                            max_height=min_size, max_width=max_size)
         return images
 
     @staticmethod

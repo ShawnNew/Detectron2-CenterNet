@@ -1,9 +1,13 @@
 import contextlib
+import logging
 
+import onnx
 import torch
 
 from detectron2.modeling import meta_arch
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
+
+logger = logging.getLogger(__name__)
 
 
 class MetaModel(torch.nn.Module):
@@ -71,6 +75,12 @@ class MetaModel(torch.nn.Module):
         m_results = self.inference(m_inputs)
         m_outputs = self.convert_outputs(inputs, m_inputs, m_results)
         return m_outputs
+
+    def get_input_names(self):
+        raise NotImplementedError
+
+    def get_output_names(self):
+        raise NotImplementedError
 
 
 class RetinaNetModel(MetaModel):
@@ -141,6 +151,46 @@ def trace_context(model):
     model._trace_mode = True
     yield
     model._trace_mode = trace_mode
+
+
+def remove_copy_between_cpu_and_gpu(onnx_model):
+    """
+    In-place remove copy ops between cpu/gpu in onnx model.
+    """
+
+    def _rename_node_input_output(_node, _src, _dst):
+        for i, name in enumerate(_node.input):
+            if name == _src:
+                logger.info("rename {} input: {} -> {}".format(_node.name, _src, _dst))
+                _node.input[i] = _dst
+        for i, name in enumerate(_node.output):
+            if name == _src:
+                logger.info("rename {} output: {} -> {}".format(_node.name, _src, _dst))
+                _node.output[i] = _dst
+
+    _COPY_OPS = ["CopyCPUToGPU", "CopyGPUToCPU"]
+
+    onnx.checker.check_model(onnx_model)
+    remove_list = []
+    name_pairs = []
+    for node in onnx_model.graph.node:
+        if node.op_type in _COPY_OPS:
+            assert len(node.input) == len(node.output) == 1
+            name_pairs.append([node.input[0], node.output[0]])
+            remove_list.append(node)
+
+    if not remove_list:
+        return onnx_model
+
+    for node in remove_list:
+        logger.info("remove {}: {} -> {}".format(node.name, node.input[0], node.output[0]))
+        onnx_model.graph.node.remove(node)
+    for node in onnx_model.graph.node:
+        for src, dst in name_pairs:
+            _rename_node_input_output(node, src, dst)
+
+    onnx.checker.check_model(onnx_model)
+    return onnx_model
 
 
 META_ARCH_ONNX_EXPORT_TYPE_MAP = {
