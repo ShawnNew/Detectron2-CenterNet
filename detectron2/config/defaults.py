@@ -566,6 +566,9 @@ _C.TEST.KEYPOINT_OKS_SIGMAS = []
 # based on the limit established for the COCO dataset).
 _C.TEST.DETECTIONS_PER_IMAGE = 100
 
+# inference batch size
+_C.TEST.BATCH_SIZE = 1
+
 _C.TEST.AUG = CN({"ENABLED": False})
 _C.TEST.AUG.MIN_SIZES = (400, 500, 600, 700, 800, 900, 1000, 1100, 1200)
 _C.TEST.AUG.MAX_SIZE = 4000

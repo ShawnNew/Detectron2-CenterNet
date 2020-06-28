@@ -6,6 +6,9 @@ import torch
 
 from detectron2.modeling import meta_arch
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
+from detectron2.structures import Boxes, Instances, RotatedBoxes
+
+from .patcher import ROIHeadsPatcher, patch_generalized_rcnn
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +141,86 @@ class RetinaNetModel(MetaModel):
         return ["image_sizes"] + output_names
 
 
+class GeneralizedRCNNModel(MetaModel):
+
+    def __init__(self, cfg, torch_model, trace_mode=False):
+        assert isinstance(torch_model, meta_arch.GeneralizedRCNN)
+        torch_model = patch_generalized_rcnn(torch_model)
+        torch_model.proposal_generator.tensor_mode = True
+        super(GeneralizedRCNNModel, self).__init__(cfg, torch_model, trace_mode)
+
+        self._roi_heads_patcher = ROIHeadsPatcher(cfg, self._wrapped_model.roi_heads, caffe2=False)
+
+    def convert_inputs(self, batched_inputs):
+        assert isinstance(self._wrapped_model, meta_arch.GeneralizedRCNN)
+        images = self._wrapped_model.preprocess_image(batched_inputs)
+
+        # compute scales and im_info
+        assert not self._wrapped_model.training
+        min_size = self._wrapped_model.input.MIN_SIZE_TEST
+        max_size = self._wrapped_model.input.MAX_SIZE_TEST
+        min_size = min_size[0] if isinstance(min_size, tuple) else min_size
+        scales = []
+        for i in range(len(batched_inputs)):
+            s = max(batched_inputs[i]["height"] * 1.0 / min_size,
+                    batched_inputs[i]["width"] * 1.0 / max_size)
+            scales.append((s,))
+        im_info = []
+        for image_size, scale in zip(images.image_sizes, scales):
+            im_info.append([*image_size, *scale])
+        return {
+            "images": images.tensor,
+            "image_sizes": torch.tensor(images.image_sizes),
+            "im_info": torch.tensor(im_info, device=images.tensor.device),
+        }
+
+    def convert_outputs(self, batched_inputs, inputs, results):
+        image_sizes = inputs["image_sizes"]
+        m_results = [Instances(image_size) for image_size in image_sizes]
+        assert len(image_sizes) == 1, "batch size: {}".format(len(image_sizes))
+        m_results = m_results[0]
+
+        pred_boxes = results["pred_boxes"]
+        scores = results["scores"]
+        pred_classes = results["pred_classes"].to(torch.int64)
+        if pred_boxes.shape[1] == 5:
+            m_results.pred_boxes = RotatedBoxes(pred_boxes)
+        else:
+            m_results.pred_boxes = Boxes(pred_boxes)
+        m_results.scores = scores
+        m_results.pred_classes = pred_classes
+        if "pred_masks" in results:
+            pred_masks = results["pred_masks"]
+            num_masks = pred_masks.shape[0]
+            indices = torch.arange(num_masks, device=pred_classes.device)
+            m_results.pred_masks = pred_masks[indices, pred_classes][:, None]
+
+        return meta_arch.GeneralizedRCNN._postprocess([m_results], batched_inputs, image_sizes)
+
+    def inference(self, inputs):
+        images = inputs["images"]
+        features = self._wrapped_model.backbone(images)
+        proposals, _ = self._wrapped_model.proposal_generator(inputs, features)
+        with self._roi_heads_patcher.mock_roi_heads():
+            detector_results, _ = self._wrapped_model.roi_heads(inputs, features, proposals)
+        flatten = detector_results[0].flatten()
+
+        results = {}
+        for i, output_name in enumerate(detector_results[0].batch_extra_fields.keys()):
+            results[output_name] = flatten[i]
+        return results
+
+    def get_input_names(self):
+        return ["images", "image_sizes", "im_info"]
+
+    def get_output_names(self):
+        if hasattr(self._wrapped_model.roi_heads, "mask_pooler") or \
+                hasattr(self._wrapped_model.roi_heads, "mask_head"):
+            return ["pred_boxes", "scores", "pred_classes", "pred_masks"]
+        else:
+            return ["pred_boxes", "scores", "pred_classes"]
+
+
 @contextlib.contextmanager
 def trace_context(model):
     """
@@ -182,17 +265,50 @@ def remove_copy_between_cpu_and_gpu(onnx_model):
     if not remove_list:
         return onnx_model
 
+    # maintain a list of set where identical input and output are put together
+    # and an indexing mapping for each input and output
+    identities = []
+    node_index = {}
+    for src, dst in name_pairs:
+        src_i = node_index.get(src, -1)
+        dst_i = node_index.get(dst, -1)
+        if src_i < 0 and dst_i < 0:
+            node_index[src] = len(identities)
+            node_index[dst] = len(identities)
+            identities.append({src, dst})
+        elif src_i > 0 and dst_i < 0:
+            node_index[dst] = node_index[src]
+            identities[src_i].add(dst)
+        elif src_i < 0 and dst_i > 0:
+            node_index[src] = node_index[dst]
+            identities[dst_i].add(src)
+
+    # keep onnx model bindings unchanged
+    model_bindings = set.union(
+        set([node.name for node in onnx_model.graph.input]),
+        set([node.name for node in onnx_model.graph.output]))
+
+    for i, identity in enumerate(identities):
+        binding = set.intersection(identity, model_bindings)
+        if binding:
+            assert len(binding) == 1, binding
+            identity = binding
+        identities[i] = sorted(list(identity))[-1]
+
     for node in remove_list:
         logger.info("remove {}: {} -> {}".format(node.name, node.input[0], node.output[0]))
         onnx_model.graph.node.remove(node)
     for node in onnx_model.graph.node:
-        for src, dst in name_pairs:
-            _rename_node_input_output(node, src, dst)
+        for src, idx in node_index.items():
+            dst = identities[idx]
+            if src != dst:
+                _rename_node_input_output(node, src, dst)
 
     onnx.checker.check_model(onnx_model)
     return onnx_model
 
 
 META_ARCH_ONNX_EXPORT_TYPE_MAP = {
+    "GeneralizedRCNN": GeneralizedRCNNModel,
     "RetinaNet": RetinaNetModel,
 }

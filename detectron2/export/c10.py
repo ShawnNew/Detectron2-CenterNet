@@ -164,13 +164,16 @@ class Caffe2RPN(Caffe2Compatible, rpn.RPN):
         features = [features[f] for f in self.in_features]
         objectness_logits_pred, anchor_deltas_pred = self.rpn_head(features)
 
-        assert isinstance(images, ImageList)
-        if self.tensor_mode:
-            im_info = images.image_sizes
+        if isinstance(images, dict):
+            im_info = images["im_info"]
         else:
-            im_info = torch.Tensor(
-                [[im_sz[0], im_sz[1], torch.Tensor([1.0])] for im_sz in images.image_sizes]
-            ).to(images.tensor.device)
+            assert isinstance(images, ImageList)
+            if self.tensor_mode:
+                im_info = images.image_sizes
+            else:
+                im_info = torch.Tensor(
+                    [[im_sz[0], im_sz[1], torch.Tensor([1.0])] for im_sz in images.image_sizes]
+                ).to(images.tensor.device)
         assert isinstance(im_info, torch.Tensor)
 
         rpn_rois_list = []
@@ -338,13 +341,18 @@ class Caffe2ROIPooler(Caffe2Compatible, poolers.ROIPooler):
             roi_feat_fpn_list.append(roi_feat_fpn)
 
         roi_feat_shuffled = cat(roi_feat_fpn_list, dim=0)
+        if torch.onnx.is_in_onnx_export():
+            assert roi_feat_shuffled.numel() > 0
+        if roi_feat_shuffled.numel() == 0:
+            return roi_feat_shuffled
         roi_feat = torch.ops._caffe2.BatchPermutation(roi_feat_shuffled, rois_idx_restore_int32)
         return roi_feat
 
 
 class Caffe2FastRCNNOutputsInference:
-    def __init__(self, tensor_mode):
+    def __init__(self, tensor_mode, caffe2=True):
         self.tensor_mode = tensor_mode  # whether the output is caffe2 tensor mode
+        self.caffe2 = caffe2
 
     def __call__(self, box_predictor, predictions, proposals):
         """ equivalent to FastRCNNOutputLayers.inference """
@@ -440,12 +448,13 @@ class Caffe2FastRCNNOutputsInference:
             dim=0,
         )
 
-        roi_class_nms = alias(roi_class_nms, "class_nms")
-        roi_score_nms = alias(roi_score_nms, "score_nms")
-        roi_bbox_nms = alias(roi_bbox_nms, "bbox_nms")
-        roi_batch_splits_nms = alias(roi_batch_splits_nms, "batch_splits_nms")
-        roi_keeps_nms = alias(roi_keeps_nms, "keeps_nms")
-        roi_keeps_size_nms = alias(roi_keeps_size_nms, "keeps_size_nms")
+        if self.caffe2:
+            roi_class_nms = alias(roi_class_nms, "class_nms")
+            roi_score_nms = alias(roi_score_nms, "score_nms")
+            roi_bbox_nms = alias(roi_bbox_nms, "bbox_nms")
+            roi_batch_splits_nms = alias(roi_batch_splits_nms, "batch_splits_nms")
+            roi_keeps_nms = alias(roi_keeps_nms, "keeps_nms")
+            roi_keeps_size_nms = alias(roi_keeps_size_nms, "keeps_size_nms")
 
         results = InstancesList(
             im_info=im_info,
@@ -469,12 +478,16 @@ class Caffe2FastRCNNOutputsInference:
 
 
 class Caffe2MaskRCNNInference:
+    def __init__(self, caffe2=True):
+        self.caffe2 = caffe2
+
     def __call__(self, pred_mask_logits, pred_instances):
         """ equivalent to mask_head.mask_rcnn_inference """
         if all(isinstance(x, InstancesList) for x in pred_instances):
             assert len(pred_instances) == 1
             mask_probs_pred = pred_mask_logits.sigmoid()
-            mask_probs_pred = alias(mask_probs_pred, "mask_fcn_probs")
+            if self.caffe2:
+                mask_probs_pred = alias(mask_probs_pred, "mask_fcn_probs")
             pred_instances[0].pred_masks = mask_probs_pred
         else:
             mask_rcnn_inference(pred_mask_logits, pred_instances)

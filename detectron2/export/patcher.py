@@ -77,13 +77,13 @@ def patch_generalized_rcnn(model):
 
 @contextlib.contextmanager
 def mock_fastrcnn_outputs_inference(
-    tensor_mode, check=True, box_predictor_type=FastRCNNOutputLayers
+    tensor_mode, check=True, box_predictor_type=FastRCNNOutputLayers, caffe2=True,
 ):
     with mock.patch.object(
         box_predictor_type,
         "inference",
         autospec=True,
-        side_effect=Caffe2FastRCNNOutputsInference(tensor_mode),
+        side_effect=Caffe2FastRCNNOutputsInference(tensor_mode, caffe2=caffe2),
     ) as mocked_func:
         yield
     if check:
@@ -91,9 +91,9 @@ def mock_fastrcnn_outputs_inference(
 
 
 @contextlib.contextmanager
-def mock_mask_rcnn_inference(tensor_mode, patched_module, check=True):
+def mock_mask_rcnn_inference(tensor_mode, patched_module, check=True, caffe2=True):
     with mock.patch(
-        "{}.mask_rcnn_inference".format(patched_module), side_effect=Caffe2MaskRCNNInference()
+        "{}.mask_rcnn_inference".format(patched_module), side_effect=Caffe2MaskRCNNInference(caffe2=caffe2)
     ) as mocked_func:
         yield
     if check:
@@ -112,8 +112,9 @@ def mock_keypoint_rcnn_inference(tensor_mode, patched_module, use_heatmap_max_ke
 
 
 class ROIHeadsPatcher:
-    def __init__(self, cfg, heads):
+    def __init__(self, cfg, heads, caffe2=True):
         self.heads = heads
+        self.caffe2 = caffe2
 
         self.use_heatmap_max_keypoint = cfg.EXPORT_CAFFE2.USE_HEATMAP_MAX_KEYPOINT
 
@@ -136,6 +137,7 @@ class ROIHeadsPatcher:
                 tensor_mode=tensor_mode,
                 check=True,
                 box_predictor_type=type(self.heads.box_predictor),
+                caffe2=self.caffe2,
             )
         ]
         if getattr(self.heads, "keypoint_on", False):
@@ -145,7 +147,7 @@ class ROIHeadsPatcher:
                 )
             ]
         if getattr(self.heads, "mask_on", False):
-            mock_ctx_managers += [mock_mask_rcnn_inference(tensor_mode, mask_head_mod)]
+            mock_ctx_managers += [mock_mask_rcnn_inference(tensor_mode, mask_head_mod, caffe2=self.caffe2)]
 
         with contextlib.ExitStack() as stack:  # python 3.3+
             for mgr in mock_ctx_managers:
