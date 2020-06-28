@@ -18,6 +18,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import time
+
 import numpy as np
 import pycuda.autoinit
 import pycuda.driver
@@ -26,6 +28,11 @@ import tensorrt as trt
 from six import string_types
 
 from .config import Config
+
+try:
+    from trt_profiler import Profiler
+except ImportError as error:
+    Profiler = None
 
 _config = Config()
 
@@ -128,6 +135,11 @@ class Engine(object):
             _ = binding.host_buffer  # Force buffer allocation
         self.context = self.engine.create_execution_context()
         self.stream = pycuda.driver.Stream()
+        # register TensorRT profiler
+        self.count = 0
+        self.engine_time = 0
+        if Profiler is not None:
+            self.context.profiler = Profiler()
 
     def __del__(self):
         if self.engine is not None:
@@ -153,8 +165,16 @@ class Engine(object):
             input_binding_array = input_binding.device_buffer
             input_binding_array.set_async(input_array, self.stream)
 
-        self.context.execute_async_v2(
-            self.binding_addrs, self.stream.handle)
+        self.stream.synchronize()
+        start_time = time.perf_counter()
+        if Profiler is None:
+            self.context.execute_async_v2(
+                self.binding_addrs, self.stream.handle)
+            self.stream.synchronize()
+        else:
+            self.context.execute_v2(self.binding_addrs)
+        self.engine_time += (time.perf_counter() - start_time) * 1000
+        self.count += 1
 
         results = [output.get_async(self.stream)
                    for output in self.outputs]
@@ -164,3 +184,8 @@ class Engine(object):
     def run_no_dma(self, batch_size):
         self.context.execute_async(
             batch_size, self.binding_addrs, self.stream.handle)
+
+    def report_engine_time(self, filename: str, threshold: float):
+        if Profiler is not None:
+            self.context.profiler.report_engine_time(filename, threshold)
+        print("Average engine time: {:.4f} ms".format(self.engine_time / self.count))

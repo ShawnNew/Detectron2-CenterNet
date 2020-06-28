@@ -55,6 +55,9 @@ class TensorRTModel:
         else:
             raise NotImplementedError
 
+    def report_engine_time(self, filename: str, threshold: float):
+        self._engine.report_engine_time(filename, threshold)
+
 
 class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):
     def __init__(self, cfg, engine_path):

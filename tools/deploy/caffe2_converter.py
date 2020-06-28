@@ -114,3 +114,5 @@ if __name__ == "__main__":
         evaluator = COCOEvaluator(dataset, cfg, True, args.output)
         metrics = inference_on_dataset(model, data_loader, evaluator)
         print_csv_format(metrics)
+        if args.format == "tensorrt":
+            model.report_engine_time("engine_time.txt", 0.5)
