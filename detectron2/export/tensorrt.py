@@ -1,24 +1,20 @@
 import functools
 import logging
-import os
-import sys
+import re
 import types
 
 import tensorrt as trt
 import torch
-
 from detectron2.layers.shape_spec import ShapeSpec
 from detectron2.modeling import meta_arch
 from detectron2.modeling.anchor_generator import build_anchor_generator
 from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
+
 from .meta_modeling import RetinaNetModel
+from .onnx_tensorrt.tensorrt_engine import Engine
 
 logger = logging.getLogger(__name__)
-print("load onnx_tensorrt from {}".format(os.environ["onnx_tensorrt_root"]))
-
-sys.path.append(os.environ["onnx_tensorrt_root"])
-from onnx_tensorrt.tensorrt_engine import Engine
 
 
 def to_numpy(tensor):
@@ -97,10 +93,16 @@ class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):
 
     def convert_inputs(self, batched_inputs):
         images = self._ns.preprocess_image(batched_inputs)
-        return {
+        inputs = {
             "images": images.tensor,
             "image_sizes": torch.tensor(images.image_sizes),
         }
+        m_inputs = {}
+        for i, binding in enumerate(self._engine.inputs):
+            name = re.sub("^__", "", binding.name)
+            assert name in inputs, name
+            m_inputs[name] = inputs[name]
+        return m_inputs
 
     def convert_outputs(self, batched_inputs, inputs, results):
         output_names = self.get_output_names()
