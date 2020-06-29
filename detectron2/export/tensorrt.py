@@ -3,6 +3,7 @@ import logging
 import re
 import types
 
+import onnx
 import tensorrt as trt
 import torch
 from detectron2.layers.shape_spec import ShapeSpec
@@ -12,6 +13,7 @@ from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
 
 from .meta_modeling import RetinaNetModel
+from .onnx_tensorrt import backend
 from .onnx_tensorrt.tensorrt_engine import Engine
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,26 @@ class TensorRTModel:
 
     def report_engine_time(self, filename: str, threshold: float):
         self._engine.report_engine_time(filename, threshold)
+
+    @classmethod
+    def build_engine(cls, onnx_f, engine_f, max_batch_size, max_workspace_size=None, device=None,
+                     fp16_mode=False, int8_mode=False, int8_calibrator=None):
+        if int8_mode:
+            assert int8_calibrator is not None, "Calibrator is not set with int8 mode used."
+        assert device is not None, device
+
+        onnx_model = onnx.load(onnx_f)
+        onnx.checker.check_model(onnx_model)
+
+        if max_workspace_size is None:
+            max_workspace_size = 6 << 30
+        engine = backend.prepare(onnx_model, device, max_batch_size=max_batch_size,
+                                 max_workspace_size=max_workspace_size, serialize_engine=True,
+                                 fp16_mode=fp16_mode, int8_mode=int8_mode, int8_calibrator=int8_calibrator)
+        with open(engine_f, "wb") as f:
+            engine = engine.engine.engine
+            f.write(engine.serialize())
+        logger.info("TensorRT engine is saved to {}".format(engine_f))
 
 
 class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):

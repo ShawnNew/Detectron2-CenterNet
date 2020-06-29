@@ -2,6 +2,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import argparse
 import os
+import re
 import onnx
 import torch
 
@@ -10,7 +11,7 @@ from detectron2.config import get_cfg
 from detectron2.data import build_detection_test_loader
 from detectron2.evaluation import COCOEvaluator, inference_on_dataset, print_csv_format
 from detectron2.export import Caffe2Tracer, add_export_config
-from detectron2.export.tensorrt import META_ARCH_TENSORRT_EXPORT_TYPE_MAP
+from detectron2.export.tensorrt import META_ARCH_TENSORRT_EXPORT_TYPE_MAP, TensorRTModel
 from detectron2.modeling import build_model
 from detectron2.utils.env import TORCH_VERSION
 from detectron2.utils.logger import setup_logger
@@ -27,6 +28,17 @@ def setup_cfg(args):
     if cfg.MODEL.DEVICE != "cpu":
         assert TORCH_VERSION >= (1, 5), "PyTorch>=1.5 required for GPU conversion!"
     return cfg
+
+
+def override(file):
+    name = ""
+    while not (len(name.strip()) == 1 and re.match("[YyNn]", name.strip())):
+        print("File {} already exists. Override? [YyNn] ".format(file), end="")
+        name = input()
+    if name.lower() == "y":
+        return True
+    else:
+        return False
 
 
 if __name__ == "__main__":
@@ -88,6 +100,12 @@ if __name__ == "__main__":
         # Print the model structure in pytorch style
         with open(os.path.join(args.output, "model.txt"), "w") as f:
             f.write(str(script_model))
+    elif args.format == "tensorrt":
+        onnx_f = os.path.join(args.output, "model.onnx")
+        engine_f = os.path.join(args.output, "model.trt")
+        assert os.path.isfile(onnx_f), "path {} is not a file".format(onnx_f)
+        if not os.path.isfile(engine_f) or override(engine_f):
+            TensorRTModel.build_engine(onnx_f, engine_f, cfg.TEST.BATCH_SIZE, device=cfg.MODEL.DEVICE.upper())
 
     # GC
     del first_batch

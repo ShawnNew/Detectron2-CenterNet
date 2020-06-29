@@ -33,8 +33,10 @@ cd tools/deploy
 
 **mask_rcnn_R_50_FPN_1x**
 
-* model zoo: 38.6500 (38.6539), 35.2411 (35.2287), 0.046978 (0.220222)
-* traceable model: 38.5594 (), 35.1413 (), 0.063897 ()
+* model zoo: 38.6500 (38.6539), 35.2411 (35.2287), 0.047125 (0.219406)
+* traceable model: 38.5594 (34.2371), 35.1413 (31.4533), 0.064155 (0.222919)
+
+Performance of traceable model drops when batch size is larger than 1 due to the incorrect implementation of caffe2.
 
 ```bash
 # mask_rcnn_R_50_FPN_1x

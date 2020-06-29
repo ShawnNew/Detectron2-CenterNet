@@ -24,6 +24,7 @@ from __future__ import print_function
 from ctypes import cdll, c_char_p
 
 # from onnx import numpy_helper
+import logging
 import numpy as np
 import onnx
 import six
@@ -33,6 +34,8 @@ from onnx.backend.base import Backend, BackendRep, Device, DeviceType, namedtupl
 
 from .config import Config
 from .tensorrt_engine import Engine
+
+logger = logging.getLogger(__name__)
 
 libcudart = cdll.LoadLibrary('libcudart.so')
 libcudart.cudaGetErrorString.restype = c_char_p
@@ -98,10 +101,30 @@ class TensorRTBackendRep(BackendRep):
         self.builder.max_batch_size = max_batch_size
         self.builder.max_workspace_size = max_workspace_size
 
-        for layer in self.network:
-            print(layer.name)
+        if "fp16_mode" in kwargs:
+            self.builder.fp16_mode = kwargs["fp16_mode"]
+            assert not kwargs["fp16_mode"] or self.builder.platform_has_fast_fp16
+        if "int8_mode" in kwargs:
+            self.builder.int8_mode = kwargs["int8_mode"]
+            assert not kwargs["int8_mode"] or self.builder.platform_has_fast_int8
+            if self.builder.int8_mode:
+                self.builder.int8_calibrator = kwargs['int8_calibrator']
 
-        print(self.network[-1].get_output(0).shape)
+        logger.info("NetworkDefinition:")
+        for layer in self.network:
+            input_shape = ["{} {}".format(layer.get_input(i).name, layer.get_input(i).shape)
+                           for i in range(layer.num_inputs)]
+            output_shape = ["{} {}".format(layer.get_output(i).name, layer.get_output(i).shape)
+                            for i in range(layer.num_outputs)]
+            print("{:40} : {:30} -> {:30}".format(layer.name, ", ".join(input_shape), ", ".join(output_shape)))
+        logger.info("NetworkInput:")
+        for i in range(self.network.num_inputs):
+            layer = self.network.get_input(i)
+            print(layer.name, layer.shape)
+        logger.info("NetworkOutput:")
+        for i in range(self.network.num_outputs):
+            layer = self.network.get_output(i)
+            print(layer.name, layer.shape)
 
         trt_engine = self.builder.build_cuda_engine(self.network)
         if trt_engine is None:
