@@ -177,25 +177,31 @@ class GeneralizedRCNNModel(MetaModel):
     def convert_outputs(self, batched_inputs, inputs, results):
         image_sizes = inputs["image_sizes"]
         m_results = [Instances(image_size) for image_size in image_sizes]
-        assert len(image_sizes) == 1, "batch size: {}".format(len(image_sizes))
-        m_results = m_results[0]
 
         pred_boxes = results["pred_boxes"]
         scores = results["scores"]
         pred_classes = results["pred_classes"].to(torch.int64)
+        batch_splits = results["batch_splits"].to(torch.int64).cpu()
+        pred_masks = results.get("pred_masks", None)
         if pred_boxes.shape[1] == 5:
-            m_results.pred_boxes = RotatedBoxes(pred_boxes)
+            pred_boxes = RotatedBoxes(pred_boxes)
         else:
-            m_results.pred_boxes = Boxes(pred_boxes)
-        m_results.scores = scores
-        m_results.pred_classes = pred_classes
-        if "pred_masks" in results:
-            pred_masks = results["pred_masks"]
-            num_masks = pred_masks.shape[0]
-            indices = torch.arange(num_masks, device=pred_classes.device)
-            m_results.pred_masks = pred_masks[indices, pred_classes][:, None]
+            pred_boxes = Boxes(pred_boxes)
 
-        return meta_arch.GeneralizedRCNN._postprocess([m_results], batched_inputs, image_sizes)
+        offset = 0
+        for i in range(len(batched_inputs)):
+            next_offset = offset + batch_splits[i]
+            m_results[i].pred_boxes = pred_boxes[offset:next_offset]
+            m_results[i].scores = scores[offset:next_offset]
+            m_results[i].pred_classes = pred_classes[offset:next_offset]
+            if "pred_masks" in results:
+                num_masks = batch_splits[i]
+                indices = torch.arange(num_masks, device=pred_classes.device)
+                m_results[i].pred_masks = \
+                    pred_masks[offset:next_offset][indices, m_results[i].pred_classes][:, None]
+            offset = next_offset
+
+        return meta_arch.GeneralizedRCNN._postprocess(m_results, batched_inputs, image_sizes)
 
     def inference(self, inputs):
         images = inputs["images"]
@@ -216,9 +222,9 @@ class GeneralizedRCNNModel(MetaModel):
     def get_output_names(self):
         if hasattr(self._wrapped_model.roi_heads, "mask_pooler") or \
                 hasattr(self._wrapped_model.roi_heads, "mask_head"):
-            return ["pred_boxes", "scores", "pred_classes", "pred_masks"]
+            return ["pred_boxes", "scores", "pred_classes", "batch_splits", "pred_masks"]
         else:
-            return ["pred_boxes", "scores", "pred_classes"]
+            return ["pred_boxes", "scores", "pred_classes", "batch_splits"]
 
 
 @contextlib.contextmanager

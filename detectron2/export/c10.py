@@ -1,5 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 
+import logging
 import math
 import torch
 import torch.nn.functional as F
@@ -158,6 +159,10 @@ class Caffe2Compatible(object):
 
 
 class Caffe2RPN(Caffe2Compatible, rpn.RPN):
+    """
+    Todo: check batch performance of GenerateProposals and CollectRpnProposals.
+    """
+
     def forward(self, images, features, gt_instances=None):
         assert not self.training
 
@@ -231,6 +236,7 @@ class Caffe2RPN(Caffe2Compatible, rpn.RPN):
                 rpn_rois_list
             ), "CollectRpnProposals requires continuous levels"
 
+            # Todo: collect proposals image by image and group proposals together
             rpn_rois = torch.ops._caffe2.CollectRpnProposals(
                 input_list,
                 # NOTE: in current implementation, rpn_max_level and rpn_min_level
@@ -239,10 +245,17 @@ class Caffe2RPN(Caffe2Compatible, rpn.RPN):
                 # consistency.
                 rpn_max_level=2 + len(rpn_rois_list) - 1,
                 rpn_min_level=2,
-                rpn_post_nms_topN=rpn_post_nms_topN,
+                rpn_post_nms_topN=rpn_post_nms_topN * im_info.shape[0],
             )
             rpn_rois = to_device(rpn_rois, device)
             rpn_roi_probs = []
+
+            # log proposal warning when batch size > 1
+            if not torch.onnx.is_in_onnx_export() and im_info.shape[0] > 1:
+                logger = logging.getLogger(__name__)
+                indices = rpn_rois[:, 0].to(dtype=torch.int64)
+                batch_splits = [torch.sum((indices == i)).item() for i in range(im_info.shape[0])]
+                logger.warning("RPN Proposal batch_splits: {}".format(batch_splits))
 
         proposals = self.c2_postprocess(im_info, rpn_rois, rpn_roi_probs, self.tensor_mode)
         return proposals, {}
@@ -276,11 +289,28 @@ class Caffe2ROIPooler(Caffe2Compatible, poolers.ROIPooler):
             pooler_fmt_boxes = poolers.convert_boxes_to_pooler_format(box_lists)
         return pooler_fmt_boxes
 
-    def forward(self, x, box_lists):
+    def forward(self, x, box_lists, batch_splits=None):
         assert not self.training
 
         pooler_fmt_boxes = self.c2_preprocess(box_lists)
         num_level_assignments = len(self.level_poolers)
+
+        # boxes with size (N, 4) does not contain batch_ids information
+        # convert boxes to pooler format with the given batch_splits
+        # Todo: onnx support required
+        if pooler_fmt_boxes.shape[1] == 4:
+            assert len(batch_splits) == 1 and isinstance(batch_splits[0], torch.Tensor)
+            batch_splits = batch_splits[0].to(dtype=torch.int64)
+            batch_ids = cat(
+                [
+                    torch.full((b, 1), i, dtype=pooler_fmt_boxes.dtype, device=pooler_fmt_boxes.device)
+                    for i, b in enumerate(int(x.item()) for x in batch_splits)
+                ],
+                dim=0,
+            )
+            pooler_fmt_boxes = cat([batch_ids, pooler_fmt_boxes], dim=1)
+        assert pooler_fmt_boxes.shape[1] == 5, \
+            "Boxes with shape {} should be converted to pooler format".format(pooler_fmt_boxes.shape)
 
         if num_level_assignments == 1:
             if isinstance(self.level_poolers[0], ROIAlignRotated):
@@ -414,6 +444,19 @@ class Caffe2FastRCNNOutputsInference:
         roi_pred_bbox = to_device(roi_pred_bbox, device)
         roi_batch_splits = to_device(roi_batch_splits, device)
 
+        # batch_ids information is missing after BBoxTransform but without grouping
+        # Todo: implement grouping in BBoxTransform/CollectRpnProposals
+        if not torch.onnx.is_in_onnx_export() and len(roi_batch_splits) > 1:
+            class_prob_concat = []
+            roi_pred_bbox_concat = []
+            batch_ids = rois[:, 0].to(dtype=torch.int64)
+            for i in range(len(roi_batch_splits)):
+                indices = (batch_ids == i).nonzero(as_tuple=True)
+                class_prob_concat.append(class_prob[indices])
+                roi_pred_bbox_concat.append(roi_pred_bbox[indices])
+            class_prob = cat(class_prob_concat, dim=0)
+            roi_pred_bbox = cat(roi_pred_bbox_concat, dim=0)
+
         nms_outputs = torch.ops._caffe2.BoxWithNMSLimit(
             to_device(class_prob, "cpu"),
             to_device(roi_pred_bbox, "cpu"),
@@ -463,6 +506,7 @@ class Caffe2FastRCNNOutputsInference:
                 "pred_boxes": Caffe2Boxes(roi_bbox_nms),
                 "scores": roi_score_nms,
                 "pred_classes": roi_class_nms,
+                "batch_splits": roi_batch_splits_nms,
             },
         )
 

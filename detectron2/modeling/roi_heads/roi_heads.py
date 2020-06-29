@@ -773,7 +773,13 @@ class StandardROIHeads(ROIHeads):
             return self.mask_head(mask_features, proposals)
         else:
             pred_boxes = [x.pred_boxes for x in instances]
-            mask_features = self.mask_pooler(features, pred_boxes)
+            if all(isinstance(x, Instances) for x in instances):
+                mask_features = self.mask_pooler(features, pred_boxes)
+            else:
+                # pred_boxes from InstancesList might not contain batch split information
+                # recover pred_boxes before pooling operations
+                batch_splits = [x.batch_splits for x in instances]
+                mask_features = self.mask_pooler(features, pred_boxes, batch_splits=batch_splits)
             return self.mask_head(mask_features, instances)
 
     def _forward_keypoint(
