@@ -6,6 +6,7 @@ import torch
 
 from . import detection_utils as utils
 from . import transforms as T
+from .catalog import MetadataCatalog
 
 """
 This file contains the default mapping that's applied to "dataset dicts".
@@ -46,6 +47,9 @@ class DatasetMapper:
         self.mask_format    = cfg.INPUT.MASK_FORMAT
         self.keypoint_on    = cfg.MODEL.KEYPOINT_ON
         self.load_proposals = cfg.MODEL.LOAD_PROPOSALS
+        self.hm_on          = cfg.INPUT.HM
+        self.down_ratio     = cfg.MODEL.CENTERNET.DOWN_RATIO
+        self.meta           = MetadataCatalog.get(cfg.DATASETS.TRAIN[0])
         # fmt: on
         if self.keypoint_on and is_train:
             # Flip only makes sense in training
@@ -145,6 +149,16 @@ class DatasetMapper:
             if self.crop_gen and instances.has("gt_masks"):
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             dataset_dict["instances"] = utils.filter_empty_instances(instances)
+
+            # calculate heatmap for centernet usage after bbox transformation
+            if self.hm_on:
+                # heatmap is ON
+                output_shape = (image_shape[0] // self.down_ratio,
+                                image_shape[1] // self.down_ratio) # h, w
+                dataset_dict = utils.gen_heatmap(dataset_dict,
+                                                 output_shape,
+                                                 self.meta)
+
 
         # USER: Remove if you don't do semantic/panoptic segmentation.
         if "sem_seg_file_name" in dataset_dict:

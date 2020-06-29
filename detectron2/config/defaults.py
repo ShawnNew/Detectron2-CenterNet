@@ -46,6 +46,9 @@ _C.MODEL.PIXEL_STD = [1.0, 1.0, 1.0]
 # INPUT
 # -----------------------------------------------------------------------------
 _C.INPUT = CN()
+_C.INPUT.FIX_SIZE = False
+_C.INPUT.FIX_SIZE_H = 768
+_C.INPUT.FIX_SIZE_W = 1280
 # Size of the smallest side of the image during training
 _C.INPUT.MIN_SIZE_TRAIN = (800,)
 # Sample size of smallest side by choice or random selection from range give by
@@ -82,6 +85,7 @@ _C.INPUT.FORMAT = "BGR"
 # The ground truth mask format that the model will use.
 # Mask R-CNN supports either "polygon" or "bitmask" as ground truth.
 _C.INPUT.MASK_FORMAT = "polygon"  # alternative: "bitmask"
+_C.INPUT.HM = False
 
 
 # -----------------------------------------------------------------------------
@@ -452,6 +456,7 @@ _C.MODEL.RETINANET.SMOOTH_L1_LOSS_BETA = 0.1
 # CenterNet
 # ---------------------------------------------------------------------------- #
 _C.MODEL.CENTERNET = CN()
+_C.MODEL.CENTERNET.NUM_CLASSES = 7
 _C.MODEL.CENTERNET.DOWN_RATIO = 4
 _C.MODEL.CENTERNET.LAST_LEVEL = 5
 _C.MODEL.CENTERNET.HEAD_CONV = 256
@@ -460,6 +465,9 @@ _C.MODEL.CENTERNET.TASK = CN()
 _C.MODEL.CENTERNET.TASK.HM = 80
 _C.MODEL.CENTERNET.TASK.WH = 2
 _C.MODEL.CENTERNET.TASK.REG = 2
+_C.MODEL.CENTERNET.HM_WEIGHT = 1
+_C.MODEL.CENTERNET.WH_WEIGHT = 0.1
+_C.MODEL.CENTERNET.OFF_WEIGHT = 1
 
 # ---------------------------------------------------------------------------- #
 # ResNe[X]t options (ResNets = {ResNet, ResNeXt}
