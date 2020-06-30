@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 """
-Implement many useful :class:`TransformGen`.
+Implement many useful :class:`Augmentation`.
 """
 import numpy as np
 import sys
@@ -15,8 +15,8 @@ from fvcore.transforms.transform import (
 )
 from PIL import Image
 
+from .augmentation import Augmentation
 from .transform import ExtentTransform, ResizeTransform, RotationTransform
-from .transform_gen import TransformGen
 
 __all__ = [
     "RandomApply",
@@ -33,7 +33,7 @@ __all__ = [
 ]
 
 
-class RandomApply(TransformGen):
+class RandomApply(Augmentation):
     """
     Randomly apply the wrapper transformation with a given probability.
     """
@@ -41,25 +41,27 @@ class RandomApply(TransformGen):
     def __init__(self, transform, prob=0.5):
         """
         Args:
-            transform (Transform, TransformGen): the transform to be wrapped
+            transform (Transform, Augmentation): the transform to be wrapped
                 by the `RandomApply`. The `transform` can either be a
-                `Transform` or `TransformGen` instance.
+                `Transform` or `Augmentation` instance.
             prob (float): probability between 0.0 and 1.0 that
                 the wrapper transformation is applied
         """
         super().__init__()
-        assert isinstance(transform, (Transform, TransformGen)), (
-            f"The given transform must either be a Transform or TransformGen instance. "
+        assert isinstance(transform, (Transform, Augmentation)), (
+            f"The given transform must either be a Transform or Augmentation instance. "
             f"Not {type(transform)}"
         )
         assert 0.0 <= prob <= 1.0, f"Probablity must be between 0.0 and 1.0 (given: {prob})"
         self.prob = prob
         self.transform = transform
+        if isinstance(transform, Augmentation):
+            self.input_args = transform.input_args
 
     def get_transform(self, img):
         do = self._rand_range() < self.prob
         if do:
-            if isinstance(self.transform, TransformGen):
+            if isinstance(self.transform, Augmentation):
                 return self.transform.get_transform(img)
             else:
                 return self.transform
@@ -67,7 +69,7 @@ class RandomApply(TransformGen):
             return NoOpTransform()
 
 
-class RandomFlip(TransformGen):
+class RandomFlip(Augmentation):
     """
     Flip the image horizontally or vertically with the given probability.
     """
@@ -99,8 +101,8 @@ class RandomFlip(TransformGen):
             return NoOpTransform()
 
 
-class Resize(TransformGen):
-    """ Resize image to a target size"""
+class Resize(Augmentation):
+    """ Resize image to a fixed target size"""
 
     def __init__(self, shape, interp=Image.BILINEAR):
         """
@@ -119,7 +121,7 @@ class Resize(TransformGen):
         )
 
 
-class ResizeShortestEdge(TransformGen):
+class ResizeShortestEdge(Augmentation):
     """
     Scale the shorter edge to the given size, with a limit of `max_size` on the longer edge.
     If `max_size` is reached, then downscale so that the longer edge does not exceed max_size.
@@ -146,7 +148,6 @@ class ResizeShortestEdge(TransformGen):
 
     def get_transform(self, img):
         h, w = img.shape[:2]
-
         if self.is_range:
             size = np.random.randint(self.short_edge_length[0], self.short_edge_length[1] + 1)
         else:
@@ -168,7 +169,7 @@ class ResizeShortestEdge(TransformGen):
         return ResizeTransform(h, w, newh, neww, self.interp)
 
 
-class RandomRotation(TransformGen):
+class RandomRotation(Augmentation):
     """
     This method returns a copy of this image, rotated the given
     number of degrees counter clockwise around the given center.
@@ -222,7 +223,7 @@ class RandomRotation(TransformGen):
         return RotationTransform(h, w, angle, expand=self.expand, center=center, interp=self.interp)
 
 
-class RandomCrop(TransformGen):
+class RandomCrop(Augmentation):
     """
     Randomly crop a subimage out of an image.
     """
@@ -274,7 +275,7 @@ class RandomCrop(TransformGen):
             NotImplementedError("Unknown crop type {}".format(self.crop_type))
 
 
-class RandomExtent(TransformGen):
+class RandomExtent(Augmentation):
     """
     Outputs an image by cropping a random "subrect" of the source image.
 
@@ -319,7 +320,7 @@ class RandomExtent(TransformGen):
         )
 
 
-class RandomContrast(TransformGen):
+class RandomContrast(Augmentation):
     """
     Randomly transforms image contrast.
 
@@ -345,7 +346,7 @@ class RandomContrast(TransformGen):
         return BlendTransform(src_image=img.mean(), src_weight=1 - w, dst_weight=w)
 
 
-class RandomBrightness(TransformGen):
+class RandomBrightness(Augmentation):
     """
     Randomly transforms image brightness.
 
@@ -371,7 +372,7 @@ class RandomBrightness(TransformGen):
         return BlendTransform(src_image=0, src_weight=1 - w, dst_weight=w)
 
 
-class RandomSaturation(TransformGen):
+class RandomSaturation(Augmentation):
     """
     Randomly transforms saturation of an RGB image.
     Input images are assumed to have 'RGB' channel order.
@@ -400,7 +401,7 @@ class RandomSaturation(TransformGen):
         return BlendTransform(src_image=grayscale, src_weight=1 - w, dst_weight=w)
 
 
-class RandomLighting(TransformGen):
+class RandomLighting(Augmentation):
     """
     The "lighting" augmentation described in AlexNet, using fixed PCA over ImageNet.
     Input images are assumed to have 'RGB' channel order.

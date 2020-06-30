@@ -33,13 +33,15 @@ class DatasetMapper:
     """
 
     def __init__(self, cfg, is_train=True):
+        self.augmentation = utils.build_augmentation(cfg, is_train)
         if cfg.INPUT.CROP.ENABLED and is_train:
-            self.crop_gen = T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE)
-            logging.getLogger(__name__).info("CropGen used in training: " + str(self.crop_gen))
+            self.augmentation.insert(0, T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE))
+            logging.getLogger(__name__).info(
+                "Cropping used in training: " + str(self.augmentation[0])
+            )
+            self.compute_tight_boxes = True
         else:
-            self.crop_gen = None
-
-        self.tfm_gens = utils.build_transform_gen(cfg, is_train)
+            self.compute_tight_boxes = False
 
         # fmt: off
         self.img_format     = cfg.INPUT.FORMAT
@@ -79,23 +81,15 @@ class DatasetMapper:
         image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
         utils.check_image_size(dataset_dict, image)
 
-        if not dataset_dict.get("annotations", []):
-            image, transforms = T.apply_transform_gens(
-                ([self.crop_gen] if self.crop_gen else []) + self.tfm_gens, image
-            )
+        # USER: Remove if you don't do semantic/panoptic segmentation.
+        if "sem_seg_file_name" in dataset_dict:
+            sem_seg_gt = utils.read_image(dataset_dict.pop("sem_seg_file_name"), "L").squeeze(2)
         else:
-            # Crop around an instance if there are instances in the image.
-            # USER: Remove if you don't use cropping
-            if self.crop_gen:
-                crop_tfm = utils.gen_crop_transform_with_instance(
-                    self.crop_gen.get_crop_size(image.shape[:2]),
-                    image.shape[:2],
-                    np.random.choice(dataset_dict["annotations"]),
-                )
-                image = crop_tfm.apply_image(image)
-            image, transforms = T.apply_transform_gens(self.tfm_gens, image)
-            if self.crop_gen:
-                transforms = crop_tfm + transforms
+            sem_seg_gt = None
+
+        aug_input = T.StandardAugInput(image, sem_seg=sem_seg_gt)
+        transforms = aug_input.apply_augmentations(self.augmentation)
+        image, sem_seg_gt = aug_input.image, aug_input.sem_seg
 
         image_shape = image.shape[:2]  # h, w
 
@@ -103,6 +97,8 @@ class DatasetMapper:
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
         dataset_dict["image"] = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
+        if sem_seg_gt is not None:
+            dataset_dict["sem_seg"] = torch.as_tensor(sem_seg_gt.astype("long"))
 
         # USER: Remove if you don't use pre-computed proposals.
         # Most users would not need this feature.
@@ -146,7 +142,7 @@ class DatasetMapper:
             # [(0,0), (2,0), (0,2)] cropped by a box [(1,0),(2,2)] (XYXY format). The tight
             # bounding box of the cropped triangle should be [(1,0),(2,1)], which is not equal to
             # the intersection of original bounding box and the cropping box.
-            if self.crop_gen and instances.has("gt_masks"):
+            if self.compute_tight_boxes and instances.has("gt_masks"):
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             dataset_dict["instances"] = utils.filter_empty_instances(instances)
 
@@ -159,11 +155,4 @@ class DatasetMapper:
                                                  output_shape,
                                                  self.meta)
 
-
-        # USER: Remove if you don't do semantic/panoptic segmentation.
-        if "sem_seg_file_name" in dataset_dict:
-            sem_seg_gt = utils.read_image(dataset_dict.pop("sem_seg_file_name"), "L").squeeze(2)
-            sem_seg_gt = transforms.apply_segmentation(sem_seg_gt)
-            sem_seg_gt = torch.as_tensor(sem_seg_gt.astype("long"))
-            dataset_dict["sem_seg"] = sem_seg_gt
         return dataset_dict

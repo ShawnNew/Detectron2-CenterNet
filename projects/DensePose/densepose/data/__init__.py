@@ -8,13 +8,7 @@ from .build import (
 )
 from .combined_loader import CombinedDataLoader
 from .dataset_mapper import DatasetMapper
-from .video.video_keyframe_dataset import VideoKeyframeDataset
-from .video.frame_selector import (
-    FrameSelectionStrategy,
-    RandomKFramesSelector,
-    FirstKFramesSelector,
-    LastKFramesSelector,
-)
+from .inference_based_loader import InferenceBasedLoader
 from .utils import is_relative_local_path, maybe_prepend_base_path
 
 # ensure the builtin datasets are registered

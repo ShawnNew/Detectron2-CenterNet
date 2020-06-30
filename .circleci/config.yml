@@ -1,8 +1,4 @@
-# Python CircleCI 2.0 configuration file
-#
-# Check https://circleci.com/docs/2.0/language-python/ for more details
-#
-version: 2
+version: 2.1
 
 # -------------------------------------------------------------------------------------
 # Environments to run the jobs in
@@ -47,8 +43,7 @@ install_dep: &install_dep
       name: Install Dependencies
       command: |
         pip install --progress-bar off -U 'git+https://github.com/facebookresearch/fvcore'
-        pip install --progress-bar off cython opencv-python
-        pip install --progress-bar off 'git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI'
+        pip install --progress-bar off opencv-python
         pip install --progress-bar off torch torchvision
 
 install_detectron2: &install_detectron2
@@ -119,6 +114,16 @@ jobs:
   gpu_tests:
     <<: *gpu
 
+    parameters:
+      pytorch_version:
+        type: string
+      torchvision_version:
+        type: string
+
+    environment:
+      PYTORCH_VERSION: << parameters.pytorch_version >>
+      TORCHVISION_VERSION: << parameters.torchvision_version >>
+
     working_directory: ~/detectron2
 
     steps:
@@ -141,7 +146,7 @@ jobs:
           name: Launch docker
           working_directory: ~/detectron2/docker
           command: |
-            nvidia-docker build -t detectron2:v0 -f Dockerfile-circleci .
+            nvidia-docker build -t detectron2:v0 -f Dockerfile-circleci --build-arg PYTORCH_VERSION=$PYTORCH_VERSION --build-arg TORCHVISION_VERSION=$TORCHVISION_VERSION .
             nvidia-docker run -itd --name d2 detectron2:v0
             docker exec -it d2 nvidia-smi
 
@@ -165,15 +170,11 @@ workflows:
   regular_test:
     jobs:
       - cpu_tests
-      - gpu_tests
-
-  #nightly_test:
-    #jobs:
-      #- gpu_tests
-    #triggers:
-      #- schedule:
-          #cron: "0 0 * * *"
-          #filters:
-            #branches:
-              #only:
-                #- master
+      - gpu_tests:
+          name: gpu_tests_pytorch1.4
+          pytorch_version: '1.4'
+          torchvision_version: '0.5'
+      - gpu_tests:
+          name: gpu_tests_pytorch1.5
+          pytorch_version: '1.5'
+          torchvision_version: '0.6'
