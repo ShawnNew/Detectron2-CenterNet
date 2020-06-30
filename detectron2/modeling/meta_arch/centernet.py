@@ -26,33 +26,36 @@ class CenterNet(nn.Module):
 
     def __init__(self, cfg):
         super().__init__()
-        down_ratio                    = cfg.MODEL.CENTERNET.DOWN_RATIO
+
+        # fmt: off
+        # backbone - DLA
         head_conv                     = cfg.MODEL.CENTERNET.HEAD_CONV
         final_kernel                  = cfg.MODEL.CENTERNET.FINAL_KERNEL
+        self.down_ratio               = cfg.MODEL.CENTERNET.DOWN_RATIO
         self.num_classes              = cfg.MODEL.CENTERNET.NUM_CLASSES
         self.last_level               = cfg.MODEL.CENTERNET.LAST_LEVEL
+        # heads
         self.heads                    = cfg.MODEL.CENTERNET.TASK
+        # loss
         self.hm_weight                = cfg.MODEL.CENTERNET.HM_WEIGHT
         self.wh_weight                = cfg.MODEL.CENTERNET.WH_WEIGHT
         self.off_weight               = cfg.MODEL.CENTERNET.OFF_WEIGHT
+        # fmt: on
+
+        # other
         self.max_detections_per_image = cfg.TEST.DETECTIONS_PER_IMAGE
-        self.vis_period               = cfg.VIS_PERIOD
-        self.input_format             = cfg.INPUT.FORMAT
-
-
         self.heads["HM"] = self.num_classes
         self.register_buffer("pixel_mean", torch.Tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1))
         self.register_buffer("pixel_std", torch.Tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1))
+        assert self.down_ratio in [2, 4, 8, 16]
+        self.first_level = int(np.log2(self.down_ratio))
 
-        assert down_ratio in [2, 4, 8, 16]
-        self.first_level = int(np.log2(down_ratio))
+        # self modules
         self.base = dla34(pretrained=False)
         channels = self.base.channels
+        out_channel = channels[self.first_level]
         scales = [2 ** i for i in range(len(channels[self.first_level:]))]
         self.dla_up = DLAUp(self.first_level, channels[self.first_level:], scales)
-
-        out_channel = channels[self.first_level]
-
         self.ida_up = IDAUp(out_channel, channels[self.first_level:self.last_level],
                             [2 ** i for i in range(self.last_level - self.first_level)])
 
@@ -85,7 +88,6 @@ class CenterNet(nn.Module):
         return self.pixel_mean.device
 
     def forward(self, batched_inputs):
-        # import pdb; pdb.set_trace()
         images = self.preprocess_image(batched_inputs)
         x = self.base(images.tensor)
         x = self.dla_up(x)
@@ -101,8 +103,6 @@ class CenterNet(nn.Module):
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
-            # gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            # gt_labels, gt_boxes = self.transform_anchors(gt_instances)
             losses = self.losses(z, batched_inputs)
             return losses
         else:
@@ -111,9 +111,9 @@ class CenterNet(nn.Module):
             for results_per_image, input_per_image, image_size in zip(
                 results, batched_inputs, images.image_sizes
             ):
-                height = input_per_image.get("height", image_size[0])
-                width = input_per_image.get("width", image_size[1])
-                r = detector_postprocess(results_per_image, height, width)
+                original_height = input_per_image.get("height", image_size[0])
+                original_width = input_per_image.get("width", image_size[1])
+                r = detector_postprocess(results_per_image, original_height, original_width)
                 processed_results.append({"instances": r})
             return processed_results
 
@@ -150,16 +150,6 @@ class CenterNet(nn.Module):
             "off_loss": off_loss * self.off_weight
         }
 
-    @torch.no_grad()
-    def transform_anchors(self, gt_instances):
-        gt_labels = []
-        matched_gt_boxes = []
-        for gt_per_image in gt_instances:
-            gt_labels.append(gt_per_image.gt_classes)
-            matched_gt_boxes.append(gt_per_image.gt_boxes)
-
-        return gt_labels, matched_gt_boxes
-
     def inference(self, outputs, image_sizes):
         """
         Inference on outputs.
@@ -193,7 +183,7 @@ class CenterNet(nn.Module):
         wh = output['WH']
         reg = output['REG']
 
-        boxes_all, scores_all, class_idxs_all = ctdet_decode(hm, wh, reg=reg)
+        boxes_all, scores_all, class_idxs_all = ctdet_decode(hm, wh, reg=reg, down_ratio=self.down_ratio)
         result = Instances(image_size)
         result.pred_boxes = Boxes(boxes_all[:self.max_detections_per_image])
         result.scores = scores_all[:self.max_detections_per_image]
@@ -293,7 +283,7 @@ def _topk(scores, K=40):
 
     return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
 
-def ctdet_decode(heat, wh, reg=None, cat_spec_wh=False, K=100):
+def ctdet_decode(heat, wh, reg=None, down_ratio=1, cat_spec_wh=False, K=100):
     batch, cat, height, width = heat.size()
 
     # perform nms on heatmaps
@@ -321,7 +311,7 @@ def ctdet_decode(heat, wh, reg=None, cat_spec_wh=False, K=100):
     bboxes = torch.cat([xs - wh[..., 0:1] / 2,
                         ys - wh[..., 1:2] / 2,
                         xs + wh[..., 0:1] / 2,
-                        ys + wh[..., 1:2] / 2], dim=2)
+                        ys + wh[..., 1:2] / 2], dim=2) * down_ratio
     bboxes = bboxes.view(K, 4)
 
     return bboxes, scores, clses
