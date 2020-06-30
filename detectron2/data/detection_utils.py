@@ -35,10 +35,10 @@ __all__ = [
     "annotations_to_instances",
     "annotations_to_instances_rotated",
     "build_augmentation",
-    "build_transform_gen",
     "create_keypoint_hflip_indices",
     "filter_empty_instances",
     "read_image",
+    "gen_heatmap",
 ]
 
 
@@ -579,17 +579,16 @@ def build_augmentation(cfg, is_train):
             len(min_size)
         )
 
-    fix_size = cfg.INPUT.FIX_SIZE
     logger = logging.getLogger(__name__)
     augmentation = []
-    augmentation.append(T.Resize(fix_size) if fix_size else T.ResizeShortestEdge(min_size, max_size, sample_style))
-    if is_train and not fix_size:
+    augmentation.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
+    if is_train:
         augmentation.append(T.RandomFlip())
         logger.info("TransformGens used in training: " + str(augmentation))
     return augmentation
 
 
-def gen_heatmap(dataset_dict, output_shape, meta):
+def gen_heatmap(instances, output_shape, meta):
     """
     Generate heatmap for centernet or cornernet, which use heatmap as backbone.
     :param dataset_dict: dataset_dict that used in detectron2
@@ -604,12 +603,11 @@ def gen_heatmap(dataset_dict, output_shape, meta):
     reg_mask = np.zeros((128), dtype=np.uint8)
     reg      = np.zeros((128, 2), dtype=np.float32)
     ind      = np.zeros((128), dtype=np.int64)
-    instances_ = dataset_dict['instances']
-    num_objs = instances_.gt_classes.shape[0]
+    num_objs = instances.gt_classes.shape[0]
     num_objs = min(num_objs, 128)
     for k in range(num_objs):
-        bbox = instances_.gt_boxes.tensor[k] / 4
-        cls_id = instances_.gt_classes[k]
+        bbox = instances.gt_boxes.tensor[k] / 4
+        cls_id = instances.gt_classes[k]
         h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
         if h > 0 and w > 0:
             import math
@@ -634,13 +632,14 @@ def gen_heatmap(dataset_dict, output_shape, meta):
     # plt.figure(2)
     # plt.imshow(dataset_dict['image'][(2, 1, 0), :, :].permute(1, 2, 0))
     # plt.show()
-    dataset_dict['hm']       = torch.tensor(hm)
-    dataset_dict['reg_mask'] = torch.tensor(reg_mask)
-    dataset_dict['ind']      = torch.tensor(ind)
-    dataset_dict['wh']       = torch.tensor(wh)
-    dataset_dict['reg']      = torch.tensor(reg)
+    instance_dict = {}
+    instance_dict['hm']       = torch.tensor(hm)
+    instance_dict['reg_mask'] = torch.tensor(reg_mask)
+    instance_dict['ind']      = torch.tensor(ind)
+    instance_dict['wh']       = torch.tensor(wh)
+    instance_dict['reg']      = torch.tensor(reg)
 
-    return dataset_dict
+    return instance_dict
 
 
 def gaussian_radius(det_size, min_overlap=0.7):

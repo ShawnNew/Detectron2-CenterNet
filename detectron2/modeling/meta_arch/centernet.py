@@ -9,6 +9,8 @@ from detectron2.structures import Boxes, ImageList, Instances
 from ..postprocessing import detector_postprocess
 from ..backbone import dla34, DLAUp, IDAUp
 from .build import META_ARCH_REGISTRY
+from detectron2.data.catalog import MetadataCatalog
+from detectron2.data.detection_utils import gen_heatmap
 
 __all__ = [
     "CenterNet",
@@ -44,6 +46,7 @@ class CenterNet(nn.Module):
 
         # other
         self.max_detections_per_image = cfg.TEST.DETECTIONS_PER_IMAGE
+        self.meta = MetadataCatalog.get(cfg.DATASETS.TRAIN[0])
         self.heads["HM"] = self.num_classes
         self.register_buffer("pixel_mean", torch.Tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1))
         self.register_buffer("pixel_std", torch.Tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1))
@@ -88,7 +91,7 @@ class CenterNet(nn.Module):
         return self.pixel_mean.device
 
     def forward(self, batched_inputs):
-        images = self.preprocess_image(batched_inputs)
+        images, instances = self.preprocess_image(batched_inputs)
         x = self.base(images.tensor)
         x = self.dla_up(x)
 
@@ -105,7 +108,7 @@ class CenterNet(nn.Module):
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
-            losses = self.losses(z, batched_inputs)
+            losses = self.losses(z, instances)
             return losses
         else:
             results = self.inference(z, images.image_sizes)
@@ -124,21 +127,30 @@ class CenterNet(nn.Module):
         Normalize, pad and batch the input images.
         """
         images = [x["image"].to(self.device) / 255. for x in batched_inputs]
+
+        if self.training:
+            instances = [x["instances"].to(self.device) for x in batched_inputs]
+        else: instances = []
+
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(images, 32)
-        return images
+        input_shape = np.array(images.tensor.shape[2:])
+        output_shape = input_shape // self.down_ratio
+        if not self.training: return images, []
+        instances = [gen_heatmap(x, output_shape, self.meta) for x in instances]
+        return images, instances
 
-    def losses(self, outputs, batched_inputs):
+    def losses(self, outputs, instances):
         # loss function for heatmap and wh+reg.
         _crit = FocalLoss()
         reg_crit = RegL1Loss()
 
         # get ground truth from batched_inputs
-        gt_hm = torch.cat([x["hm"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
-        gt_reg_mask = torch.cat([x["reg_mask"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
-        gt_ind = torch.cat([x["ind"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
-        gt_wh = torch.cat([x["wh"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
-        gt_reg = torch.cat([x["reg"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
+        gt_hm = torch.cat([x["hm"].unsqueeze(0).to(self.device) for x in instances], dim=0)
+        gt_reg_mask = torch.cat([x["reg_mask"].unsqueeze(0).to(self.device) for x in instances], dim=0)
+        gt_ind = torch.cat([x["ind"].unsqueeze(0).to(self.device) for x in instances], dim=0)
+        gt_wh = torch.cat([x["wh"].unsqueeze(0).to(self.device) for x in instances], dim=0)
+        gt_reg = torch.cat([x["reg"].unsqueeze(0).to(self.device) for x in instances], dim=0)
 
         # sigmoid for heatmap
         hm_loss = _crit(outputs['hm'], gt_hm)

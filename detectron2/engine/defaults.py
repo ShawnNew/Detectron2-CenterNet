@@ -186,8 +186,7 @@ class DefaultPredictor:
         checkpointer = DetectionCheckpointer(self.model)
         checkpointer.load(cfg.MODEL.WEIGHTS)
 
-        fixed_shape = cfg.INPUT.FIX_SIZE
-        self.aug = T.Resize(fixed_shape) if fixed_shape else T.ResizeShortestEdge(
+        self.aug = T.ResizeShortestEdge(
                 [cfg.INPUT.MIN_SIZE_TEST, cfg.INPUT.MIN_SIZE_TEST], cfg.INPUT.MAX_SIZE_TEST
             )
 
