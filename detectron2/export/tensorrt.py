@@ -1,6 +1,7 @@
 import functools
 import logging
 import re
+import time
 import types
 
 import onnx
@@ -32,6 +33,21 @@ def to_numpy(tensor):
         else tensor.cpu().numpy()
 
 
+def to_cuda(tensor):
+    """
+    Convert tensor to cuda tensor.
+    """
+    assert isinstance(tensor, torch.Tensor), type(tensor)
+    if not tensor.is_cuda:
+        tensor = tensor.cuda()
+    if tensor.dtype == torch.int64:
+        casted_tensor = tensor.to(dtype=torch.int32)
+        assert torch.equal(tensor, casted_tensor.to(dtype=tensor.dtype)), \
+            "fail to cast tensor with dtype {}".format(tensor.dtype)
+        tensor = casted_tensor
+    return tensor
+
+
 class TensorRTModel:
     """
     Base class for TensorRT inference implementation of a meta architecture.
@@ -49,11 +65,11 @@ class TensorRTModel:
 
     def inference(self, inputs):
         if isinstance(inputs, torch.Tensor):
-            return self._engine.run([to_numpy(inputs)])
+            return self._engine.run([to_cuda(inputs)])
         elif isinstance(inputs, list):
-            return self._engine.run([to_numpy(v) for v in inputs])
+            return self._engine.run([to_cuda(v) for v in inputs])
         elif isinstance(inputs, dict):
-            return self._engine.run([to_numpy(v) for k, v in inputs.items()])
+            return self._engine.run([to_cuda(v) for k, v in inputs.items()])
         else:
             raise NotImplementedError
 
@@ -72,9 +88,12 @@ class TensorRTModel:
 
         if max_workspace_size is None:
             max_workspace_size = 6 << 30
+        start_time = time.perf_counter()
         engine = backend.prepare(onnx_model, device, max_batch_size=max_batch_size,
                                  max_workspace_size=max_workspace_size, serialize_engine=True,
                                  fp16_mode=fp16_mode, int8_mode=int8_mode, int8_calibrator=int8_calibrator)
+        total_time = time.perf_counter() - start_time
+        logger.info("Engine build time: {:.2f} s".format(total_time))
         with open(engine_f, "wb") as f:
             engine = engine.engine.engine
             f.write(engine.serialize())
@@ -133,13 +152,13 @@ class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):
         output_names = self.get_output_names()
         assert len(results) == len(output_names)
 
-        # convert TensorRT output to tensor
+        # convert TensorRT output to dict
         m_results = {}
         for i, binding in enumerate(self._engine.outputs):
             assert binding.name in output_names, binding.name
             if binding.name == "image_sizes":
                 continue
-            m_results[binding.name] = torch.from_numpy(results[i]).to(self._ns.device)
+            m_results[binding.name] = results[i].to(self._ns.device)
 
         image_sizes = inputs["image_sizes"]
 

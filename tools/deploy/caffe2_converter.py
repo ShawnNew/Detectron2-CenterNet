@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import argparse
+import logging
 import os
 import re
 import onnx
@@ -32,11 +33,13 @@ def setup_cfg(args):
 
 def override(file):
     name = ""
-    while not (len(name.strip()) == 1 and re.match("[YyNn]", name.strip())):
-        print("File {} already exists. Override? [YyNn] ".format(file), end="")
+    while not (len(name.strip()) == 1 and re.match("[YyNnQq]", name.strip())):
+        print("File {} already exists. Override? [YyNnQq] ".format(file), end="")
         name = input()
     if name.lower() == "y":
         return True
+    elif name.lower() == "q":
+        exit(1)
     else:
         return False
 
@@ -51,6 +54,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
     parser.add_argument("--run-eval", action="store_true")
+    parser.add_argument("--cache", action="store_true")
+    parser.add_argument("--debug", action="store_true")
     parser.add_argument("--output", help="output directory for the converted model")
     parser.add_argument(
         "opts",
@@ -59,7 +64,11 @@ if __name__ == "__main__":
         nargs=argparse.REMAINDER,
     )
     args = parser.parse_args()
-    logger = setup_logger()
+    if args.debug:
+        verbosity=logging.DEBUG
+    else:
+        verbosity = logging.INFO
+    logger = setup_logger(verbosity=verbosity)
     logger.info("Command line arguments: " + str(args))
     os.makedirs(args.output, exist_ok=True)
 
@@ -104,7 +113,7 @@ if __name__ == "__main__":
         onnx_f = os.path.join(args.output, "model.onnx")
         engine_f = os.path.join(args.output, "model.trt")
         assert os.path.isfile(onnx_f), "path {} is not a file".format(onnx_f)
-        if not os.path.isfile(engine_f) or override(engine_f):
+        if not os.path.isfile(engine_f) or (not args.cache and override(engine_f)):
             TensorRTModel.build_engine(onnx_f, engine_f, cfg.TEST.BATCH_SIZE, device=cfg.MODEL.DEVICE.upper())
 
     # GC

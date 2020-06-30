@@ -18,7 +18,7 @@ for their usage.
 
 Detection mAP from model zoo is slightly higher with batch size 4.
 
-```bash
+```shell script
 # retinanet_R_50_FPN_1x
 ./tools/train_net.py --num-gpus 1 \
   --config-file configs/COCO-Detection/retinanet_R_50_FPN_1x.yaml \
@@ -38,7 +38,7 @@ cd tools/deploy
 
 Performance of traceable model drops when batch size is larger than 1 due to the incorrect implementation of caffe2.
 
-```bash
+```shell script
 # mask_rcnn_R_50_FPN_1x
 ./tools/train_net.py --num-gpus 1 \
   --config-file configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x.yaml \
@@ -49,4 +49,14 @@ cd tools/deploy
 ./caffe2_converter.py --format onnx --output ./mask_rcnn --run-eval \
     --config-file ../../configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x.yaml \
     MODEL.WEIGHTS /autox/users/dongqixu/envs/model_zoo/mask_rcnn_R_50_FPN_1x.pkl INPUT.DYNAMIC False TEST.BATCH_SIZE 4
+```
+
+**panoptic_fpn_R_50_1x**
+
+* model zoo: 41.2219, 37.6452, 34.6602, 39.3896, 0.056850
+
+```shell script
+./tools/train_net.py --num-gpus 1 \
+  --config-file configs/COCO-PanopticSegmentation/panoptic_fpn_R_50_1x.yaml \
+  --eval-only MODEL.WEIGHTS models/panoptic_fpn_R_50_1x.pkl
 ```

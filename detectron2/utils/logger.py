@@ -32,7 +32,7 @@ class _ColorfulFormatter(logging.Formatter):
 
 @functools.lru_cache()  # so that calling setup_logger multiple times won't add many handlers
 def setup_logger(
-    output=None, distributed_rank=0, *, color=True, name="detectron2", abbrev_name=None
+    output=None, distributed_rank=0, *, color=True, name="detectron2", abbrev_name=None, verbosity=logging.INFO
 ):
     """
     Initialize the detectron2 logger and set its verbosity level to "DEBUG".
@@ -46,12 +46,13 @@ def setup_logger(
             Set to "" to not log the root module in logs.
             By default, will abbreviate "detectron2" to "d2" and leave other
             modules unchanged.
+        verbosity (int): override verbosity level to INFO by default.
 
     Returns:
         logging.Logger: a logger
     """
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(verbosity)
     logger.propagate = False
 
     if abbrev_name is None:
@@ -63,7 +64,7 @@ def setup_logger(
     # stdout logging: master only
     if distributed_rank == 0:
         ch = logging.StreamHandler(stream=sys.stdout)
-        ch.setLevel(logging.DEBUG)
+        ch.setLevel(verbosity)
         if color:
             formatter = _ColorfulFormatter(
                 colored("[%(asctime)s %(name)s]: ", "green") + "%(message)s",
@@ -87,7 +88,7 @@ def setup_logger(
         PathManager.mkdirs(os.path.dirname(filename))
 
         fh = logging.StreamHandler(_cached_log_stream(filename))
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(verbosity)
         fh.setFormatter(plain_formatter)
         logger.addHandler(fh)
 

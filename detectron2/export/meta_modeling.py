@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import time
 
 import onnx
 import torch
@@ -74,9 +75,14 @@ class MetaModel(torch.nn.Module):
         """
         if self._trace_mode:
             return self.inference(inputs)
-        m_inputs = self.convert_inputs(inputs)
-        m_results = self.inference(m_inputs)
-        m_outputs = self.convert_outputs(inputs, m_inputs, m_results)
+        with Timer() as preprocess:
+            m_inputs = self.convert_inputs(inputs)
+        with Timer() as inference:
+            m_results = self.inference(m_inputs)
+        with Timer() as postprocess:
+            m_outputs = self.convert_outputs(inputs, m_inputs, m_results)
+        logger.debug("preprocess: {:6.2f} ms,  inference: {:6.2f} ms, postprocess: {:6.2f} ms".format(
+            preprocess.time, inference.time, postprocess.time))
         return m_outputs
 
     def get_input_names(self):
@@ -225,6 +231,15 @@ class GeneralizedRCNNModel(MetaModel):
             return ["pred_boxes", "scores", "pred_classes", "batch_splits", "pred_masks"]
         else:
             return ["pred_boxes", "scores", "pred_classes", "batch_splits"]
+
+
+class Timer:
+    def __enter__(self):
+        self.time = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.time = (time.perf_counter() - self.time) * 1000
 
 
 @contextlib.contextmanager
