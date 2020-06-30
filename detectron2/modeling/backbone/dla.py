@@ -158,8 +158,7 @@ class IDAUp(nn.Module):
             up = nn.ConvTranspose2d(o, o, f * 2, stride=f,
                                     padding=f // 2, output_padding=0,
                                     groups=o, bias=False)
-            # fill_up_weights(up)
-            weight_init.c2_msra_fill(up)
+            fill_up_weights(up)
 
             setattr(self, 'proj_' + str(i), proj)
             setattr(self, 'up_' + str(i), up)

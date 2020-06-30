@@ -1,23 +1,12 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-import math
 import numpy as np
 from typing import List
 import torch
-from fvcore.nn import sigmoid_focal_loss_jit, smooth_l1_loss
 from torch import nn
 from torch.nn import functional as F
 
-from detectron2.data.detection_utils import convert_image_to_rgb
-from detectron2.layers import ShapeSpec, batched_nms, cat
-from detectron2.structures import Boxes, ImageList, Instances, pairwise_iou
-from detectron2.utils.events import get_event_storage
-
-from ..anchor_generator import build_anchor_generator
-from ..backbone import build_backbone
-from ..box_regression import Box2BoxTransform
-from ..matcher import Matcher
+from detectron2.structures import Boxes, ImageList, Instances
 from ..postprocessing import detector_postprocess
-import fvcore.nn.weight_init as weight_init
 from ..backbone import dla34, DLAUp, IDAUp
 from .build import META_ARCH_REGISTRY
 
@@ -37,15 +26,19 @@ class CenterNet(nn.Module):
 
     def __init__(self, cfg):
         super().__init__()
-        down_ratio       = cfg.MODEL.CENTERNET.DOWN_RATIO
-        head_conv        = cfg.MODEL.CENTERNET.HEAD_CONV
-        final_kernel     = cfg.MODEL.CENTERNET.FINAL_KERNEL
-        self.num_classes = cfg.MODEL.CENTERNET.NUM_CLASSES
-        self.last_level  = cfg.MODEL.CENTERNET.LAST_LEVEL
-        self.heads       = cfg.MODEL.CENTERNET.TASK
-        self.hm_weight   = cfg.MODEL.CENTERNET.HM_WEIGHT
-        self.wh_weight   = cfg.MODEL.CENTERNET.WH_WEIGHT
-        self.off_weight  = cfg.MODEL.CENTERNET.OFF_WEIGHT
+        down_ratio                    = cfg.MODEL.CENTERNET.DOWN_RATIO
+        head_conv                     = cfg.MODEL.CENTERNET.HEAD_CONV
+        final_kernel                  = cfg.MODEL.CENTERNET.FINAL_KERNEL
+        self.num_classes              = cfg.MODEL.CENTERNET.NUM_CLASSES
+        self.last_level               = cfg.MODEL.CENTERNET.LAST_LEVEL
+        self.heads                    = cfg.MODEL.CENTERNET.TASK
+        self.hm_weight                = cfg.MODEL.CENTERNET.HM_WEIGHT
+        self.wh_weight                = cfg.MODEL.CENTERNET.WH_WEIGHT
+        self.off_weight               = cfg.MODEL.CENTERNET.OFF_WEIGHT
+        self.max_detections_per_image = cfg.TEST.DETECTIONS_PER_IMAGE
+        self.vis_period               = cfg.VIS_PERIOD
+        self.input_format             = cfg.INPUT.FORMAT
+
 
         self.heads["HM"] = self.num_classes
         self.register_buffer("pixel_mean", torch.Tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1))
@@ -53,7 +46,7 @@ class CenterNet(nn.Module):
 
         assert down_ratio in [2, 4, 8, 16]
         self.first_level = int(np.log2(down_ratio))
-        self.base = dla34(pretrained=True)
+        self.base = dla34(pretrained=False)
         channels = self.base.channels
         scales = [2 ** i for i in range(len(channels[self.first_level:]))]
         self.dla_up = DLAUp(self.first_level, channels[self.first_level:], scales)
@@ -85,13 +78,14 @@ class CenterNet(nn.Module):
                     fc.bias.data.fill_(-2.19)
                 else:
                     fill_fc_weights(fc)
-            self.__setattr__(head, fc)
+            self.__setattr__(head.lower(), fc)
 
     @property
     def device(self):
         return self.pixel_mean.device
 
     def forward(self, batched_inputs):
+        # import pdb; pdb.set_trace()
         images = self.preprocess_image(batched_inputs)
         x = self.base(images.tensor)
         x = self.dla_up(x)
@@ -103,58 +97,48 @@ class CenterNet(nn.Module):
 
         z = {}
         for head in self.heads:
-            z[head] = self.__getattr__(head)(y[-1])
+            z[head] = self.__getattr__(head.lower())(y[-1])
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
             # gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            gt_hm        = [x["hm"].unsqueeze(0).to(self.device) for x in batched_inputs]
-            gt_reg_mask  = [x["reg_mask"].unsqueeze(0).to(self.device) for x in batched_inputs]
-            gt_ind       = [x["ind"].unsqueeze(0).to(self.device) for x in batched_inputs]
-            gt_wh        = [x["wh"].unsqueeze(0).to(self.device) for x in batched_inputs]
-            gt_reg       = [x["reg"].unsqueeze(0).to(self.device) for x in batched_inputs]
-            gt_hm        = torch.cat(gt_hm, dim=0)
-            gt_reg_mask  = torch.cat(gt_reg_mask, dim=0)
-            gt_ind       = torch.cat(gt_ind, dim=0)
-            gt_wh        = torch.cat(gt_wh, dim=0)
-            gt_reg       = torch.cat(gt_reg, dim=0)
             # gt_labels, gt_boxes = self.transform_anchors(gt_instances)
-
-            losses = self.losses(z, gt_hm, gt_reg_mask, gt_ind, gt_wh, gt_reg)
-
-            # if self.vis_period > 0:
-            #     storage = get_event_storage()
-            #     if storage.iter % self.vis_period == 0:
-            #         results = self.inference(
-            #             anchors, pred_logits, pred_anchor_deltas, images.image_sizes
-            #         )
-            #         self.visualize_training(batched_inputs, results)
-
+            losses = self.losses(z, batched_inputs)
             return losses
-        # else:
-        #     results = self.inference(anchors, pred_logits, pred_anchor_deltas, images.image_sizes)
-        #     processed_results = []
-        #     for results_per_image, input_per_image, image_size in zip(
-        #         results, batched_inputs, images.image_sizes
-        #     ):
-        #         height = input_per_image.get("height", image_size[0])
-        #         width = input_per_image.get("width", image_size[1])
-        #         r = detector_postprocess(results_per_image, height, width)
-        #         processed_results.append({"instances": r})
-        #     return processed_results
+        else:
+            results = self.inference(z, images.image_sizes)
+            processed_results = []
+            for results_per_image, input_per_image, image_size in zip(
+                results, batched_inputs, images.image_sizes
+            ):
+                height = input_per_image.get("height", image_size[0])
+                width = input_per_image.get("width", image_size[1])
+                r = detector_postprocess(results_per_image, height, width)
+                processed_results.append({"instances": r})
+            return processed_results
 
     def preprocess_image(self, batched_inputs):
         """
         Normalize, pad and batch the input images.
         """
-        images = [x["image"].to(self.device) for x in batched_inputs]
+        images = [x["image"].to(self.device) / 255. for x in batched_inputs]
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(images, 32)
         return images
 
-    def losses(self, outputs, gt_hm, gt_reg_mask, gt_ind, gt_wh, gt_reg):
+    def losses(self, outputs, batched_inputs):
+        # loss function for heatmap and wh+reg.
         _crit = FocalLoss()
         reg_crit = RegL1Loss()
+
+        # get ground truth from batched_inputs
+        gt_hm = torch.cat([x["hm"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
+        gt_reg_mask = torch.cat([x["reg_mask"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
+        gt_ind = torch.cat([x["ind"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
+        gt_wh = torch.cat([x["wh"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
+        gt_reg = torch.cat([x["reg"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
+
+        # sigmoid for heatmap
         outputs['HM'] = torch.clamp(outputs['HM'].sigmoid_(), min=1e-4, max=1-1e-4)
         hm_loss = _crit(outputs['HM'], gt_hm)
         wh_loss = reg_crit(outputs['WH'], gt_reg_mask, gt_ind, gt_wh)
@@ -175,6 +159,46 @@ class CenterNet(nn.Module):
             matched_gt_boxes.append(gt_per_image.gt_boxes)
 
         return gt_labels, matched_gt_boxes
+
+    def inference(self, outputs, image_sizes):
+        """
+        Inference on outputs.
+        :param outputs: outputs of centernet
+        :param image_sizes: 
+        :return: 
+        """"""results (List[Instances]): a list of #images elements.
+        """
+        results = []
+        for img_idx, image_size in enumerate(image_sizes):
+            output = {
+                'HM': outputs['HM'][img_idx].unsqueeze(0),
+                'WH': outputs['WH'][img_idx].unsqueeze(0),
+                'REG': outputs['REG'][img_idx].unsqueeze(0)
+            }
+            results_per_image = self.inference_single_image(
+                output, tuple(image_size)
+            )
+            results.append(results_per_image)
+        return results
+
+    def inference_single_image(self, output, image_size):
+        """
+        Inference on one image.
+        :param output:
+        :param image_size:
+        :return:
+        """
+
+        hm = output['HM'].sigmoid_()
+        wh = output['WH']
+        reg = output['REG']
+
+        boxes_all, scores_all, class_idxs_all = ctdet_decode(hm, wh, reg=reg)
+        result = Instances(image_size)
+        result.pred_boxes = Boxes(boxes_all[:self.max_detections_per_image])
+        result.scores = scores_all[:self.max_detections_per_image]
+        result.pred_classes = class_idxs_all[:self.max_detections_per_image]
+        return result
 
 
 
@@ -222,8 +246,7 @@ class RegL1Loss(nn.Module):
     def forward(self, output, mask, ind, target):
         pred = _transpose_and_gather_feat(output, ind)
         mask = mask.unsqueeze(2).expand_as(pred).float()
-        # loss = F.l1_loss(pred * mask, target * mask, reduction='elementwise_mean')
-        loss = F.l1_loss(pred * mask, target * mask, size_average=False)
+        loss = F.l1_loss(pred * mask, target * mask, reduction='sum')
         loss = loss / (mask.sum() + 1e-4)
         return loss
 
@@ -242,3 +265,63 @@ def _gather_feat(feat, ind, mask=None):
         feat = feat[mask]
         feat = feat.view(-1, dim)
     return feat
+
+def _nms(heat, kernel=3):
+    pad = (kernel - 1) // 2
+
+    hmax = nn.functional.max_pool2d(
+        heat, (kernel, kernel), stride=1, padding=pad)
+    keep = (hmax == heat).float()
+    return heat * keep
+
+
+def _topk(scores, K=40):
+    batch, cat, height, width = scores.size()
+
+    topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
+
+    topk_inds = topk_inds % (height * width)
+    topk_ys = (topk_inds / width).int().float()
+    topk_xs = (topk_inds % width).int().float()
+
+    topk_score, topk_ind = torch.topk(topk_scores.view(batch, -1), K)
+    topk_clses = (topk_ind / K).int()
+    topk_inds = _gather_feat(
+        topk_inds.view(batch, -1, 1), topk_ind).view(batch, K)
+    topk_ys = _gather_feat(topk_ys.view(batch, -1, 1), topk_ind).view(batch, K)
+    topk_xs = _gather_feat(topk_xs.view(batch, -1, 1), topk_ind).view(batch, K)
+
+    return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
+
+def ctdet_decode(heat, wh, reg=None, cat_spec_wh=False, K=100):
+    batch, cat, height, width = heat.size()
+
+    # perform nms on heatmaps
+    heat = _nms(heat)
+
+    scores, inds, clses, ys, xs = _topk(heat, K=K)
+    if reg is not None:
+        reg = _transpose_and_gather_feat(reg, inds)
+        reg = reg.view(batch, K, 2)
+        xs = xs.view(batch, K, 1) + reg[:, :, 0:1]
+        ys = ys.view(batch, K, 1) + reg[:, :, 1:2]
+    else:
+        xs = xs.view(batch, K, 1) + 0.5
+        ys = ys.view(batch, K, 1) + 0.5
+    wh = _transpose_and_gather_feat(wh, inds)
+    if cat_spec_wh:
+        wh = wh.view(batch, K, cat, 2)
+        clses_ind = clses.view(batch, K, 1, 1).expand(batch, K, 1, 2).long()
+        wh = wh.gather(2, clses_ind).view(batch, K, 2)
+    else:
+        wh = wh.view(batch, K, 2)
+
+    clses = clses.view(K)
+    scores = scores.view(K)
+    bboxes = torch.cat([xs - wh[..., 0:1] / 2,
+                        ys - wh[..., 1:2] / 2,
+                        xs + wh[..., 0:1] / 2,
+                        ys + wh[..., 1:2] / 2], dim=2)
+    bboxes = bboxes.view(K, 4)
+
+    return bboxes, scores, clses

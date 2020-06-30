@@ -568,6 +568,17 @@ def gen_heatmap(dataset_dict, output_shape, meta):
             ind[k] = ct_int[1] * output_shape[1] + ct_int[0]
             reg[k] = ct - ct_int
             reg_mask[k] = 1
+    # # draw heatmap here for debug usage
+    # import matplotlib.pyplot as plt
+    # hm_show = [torch.tensor(x) for x in hm]
+    # plt.figure(1)
+    # for i in range(num_classes):
+    #     plt.subplot(2, 4, i+1)
+    #     plt.imshow(hm_show[i].numpy(), cmap='hot')
+    # plt.show()
+    # plt.figure(2)
+    # plt.imshow(dataset_dict['image'][(2, 1, 0), :, :].permute(1, 2, 0))
+    # plt.show()
     dataset_dict['hm']       = torch.tensor(hm)
     dataset_dict['reg_mask'] = torch.tensor(reg_mask)
     dataset_dict['ind']      = torch.tensor(ind)
