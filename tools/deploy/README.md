@@ -12,9 +12,9 @@ for their usage.
 
 **retinanet_R_50_FPN_1x**
 
-* model zoo: 37.4241 (37.4342), 0.067417 (0.341997)
-* traceable model: 37.3129, 0.076934 (0.295314)
-* TensorRT: 37.3136, 0.090066 (0.366513), 30.7647 ms (123.0706 ms)
+* model zoo: 37.4241 (37.4342), 0.067932 (0.341894)
+* traceable model: 37.3129, 0.077887 (0.295680)
+* TensorRT: 37.3129 (37.3136), 0.066484 (0.258170), 30.8540 ms (124.0023 ms)
 
 Detection mAP from model zoo is slightly higher with batch size 4.
 
@@ -58,5 +58,5 @@ cd tools/deploy
 ```shell script
 ./tools/train_net.py --num-gpus 1 \
   --config-file configs/COCO-PanopticSegmentation/panoptic_fpn_R_50_1x.yaml \
-  --eval-only MODEL.WEIGHTS models/panoptic_fpn_R_50_1x.pkl
+  --eval-only MODEL.WEIGHTS /autox/users/dongqixu/envs/model_zoo/panoptic_fpn_R_50_1x.pkl
 ```
