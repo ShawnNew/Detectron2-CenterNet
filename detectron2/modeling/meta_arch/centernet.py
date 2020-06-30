@@ -99,7 +99,9 @@ class CenterNet(nn.Module):
 
         z = {}
         for head in self.heads:
-            z[head] = self.__getattr__(head.lower())(y[-1])
+            z[head.lower()] = self.__getattr__(head.lower())(y[-1])
+
+        z['hm'] = torch.clamp(z['hm'].sigmoid_(), min=1e-4, max=1-1e-4)
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
@@ -139,10 +141,9 @@ class CenterNet(nn.Module):
         gt_reg = torch.cat([x["reg"].unsqueeze(0).to(self.device) for x in batched_inputs], dim=0)
 
         # sigmoid for heatmap
-        outputs['HM'] = torch.clamp(outputs['HM'].sigmoid_(), min=1e-4, max=1-1e-4)
-        hm_loss = _crit(outputs['HM'], gt_hm)
-        wh_loss = reg_crit(outputs['WH'], gt_reg_mask, gt_ind, gt_wh)
-        off_loss = reg_crit(outputs['REG'], gt_reg_mask, gt_ind, gt_reg)
+        hm_loss = _crit(outputs['hm'], gt_hm)
+        wh_loss = reg_crit(outputs['wh'], gt_reg_mask, gt_ind, gt_wh)
+        off_loss = reg_crit(outputs['reg'], gt_reg_mask, gt_ind, gt_reg)
 
         return {
             "hm_loss": hm_loss * self.hm_weight,
@@ -161,9 +162,9 @@ class CenterNet(nn.Module):
         results = []
         for img_idx, image_size in enumerate(image_sizes):
             output = {
-                'HM': outputs['HM'][img_idx].unsqueeze(0),
-                'WH': outputs['WH'][img_idx].unsqueeze(0),
-                'REG': outputs['REG'][img_idx].unsqueeze(0)
+                'hm': outputs['hm'][img_idx].unsqueeze(0),
+                'wh': outputs['wh'][img_idx].unsqueeze(0),
+                'reg': outputs['reg'][img_idx].unsqueeze(0)
             }
             results_per_image = self.inference_single_image(
                 output, tuple(image_size)
@@ -179,11 +180,10 @@ class CenterNet(nn.Module):
         :return:
         """
 
-        hm = output['HM'].sigmoid_()
-        wh = output['WH']
-        reg = output['REG']
-
-        boxes_all, scores_all, class_idxs_all = ctdet_decode(hm, wh, reg=reg, down_ratio=self.down_ratio)
+        boxes_all, scores_all, class_idxs_all = ctdet_decode(output['hm'],
+                                                             output['wh'],
+                                                             reg=output['reg'],
+                                                             down_ratio=self.down_ratio)
         result = Instances(image_size)
         result.pred_boxes = Boxes(boxes_all[:self.max_detections_per_image])
         result.scores = scores_all[:self.max_detections_per_image]

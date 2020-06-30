@@ -520,16 +520,12 @@ def build_transform_gen(cfg, is_train):
             len(min_size)
         )
 
-    is_fixed = cfg.INPUT.FIX_SIZE
+    fix_size = cfg.INPUT.FIX_SIZE
     logger = logging.getLogger(__name__)
     tfm_gens = []
-    if not is_fixed:
-        tfm_gens.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
-    else:
-        shape = (cfg.INPUT.FIX_SIZE_H, cfg.INPUT.FIX_SIZE_W)
-        tfm_gens.append(T.Resize(shape))
-    if is_train:
-        # tfm_gens.append(T.RandomFlip())
+    tfm_gens.append(T.Resize(fix_size) if fix_size else T.ResizeShortestEdge(min_size, max_size, sample_style))
+    if is_train and not fix_size:
+        tfm_gens.append(T.RandomFlip())
         logger.info("TransformGens used in training: " + str(tfm_gens))
     return tfm_gens
 
