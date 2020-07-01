@@ -124,7 +124,7 @@ if __name__ == "__main__":
                 # get preprocess function from model
                 model = tracer.get_onnx_traceable()
                 max_calibration_batch = 100
-                if os.path.exists(cache_f):
+                if os.path.exists(cache_f) and (not args.cache and override(cache_f)):
                     os.remove(cache_f)
                 int8_calibrator = TensorRTModel.get_int8_calibrator(
                     max_calibration_batch, data_loader, model.convert_inputs, cache_f)

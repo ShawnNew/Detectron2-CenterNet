@@ -25,7 +25,6 @@ class PythonEntropyCalibrator(trt.tensorrt.IInt8EntropyCalibrator2):
 
     def __del__(self):
         del self.iter
-        super(PythonEntropyCalibrator, self).__del__()
 
     def get_batch(self, names):
         logger.info("Get batch with inputs: {}".format(", ".join(names)))

@@ -16,6 +16,7 @@ set -x
 
 output="$(pwd)/output/${network}_batch_${batch_size}"
 
+rm -rfv "${output}"
 mkdir -p "${output}"
 
 # model zoo
@@ -46,7 +47,7 @@ cd tools/deploy || exit
     --config-file ../../${config} \
     MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt_int8.txt
 
-./caffe2_converter.py --format tensorrt --run-eval --debug --fp16 --int8 \
+./caffe2_converter.py --format tensorrt --run-eval --debug --fp16 --int8 --cache \
     --output "${output}" \
     --config-file ../../${config} \
     MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt_fp16_int8.txt
