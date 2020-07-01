@@ -16,7 +16,6 @@ set -x
 
 output="$(pwd)/output/${network}_batch_${batch_size}"
 
-rm -rfv "${output}"
 mkdir -p "${output}"
 
 # model zoo
@@ -32,17 +31,17 @@ cd tools/deploy || exit
     MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/traceable_model.txt
 
 # tensorrt
-./caffe2_converter.py --format tensorrt --run-eval --debug \
+./caffe2_converter.py --format tensorrt --run-eval --debug --cache \
     --output "${output}" \
     --config-file ../../${config} \
     MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt.txt
 
-./caffe2_converter.py --format tensorrt --run-eval --debug --fp16 \
+./caffe2_converter.py --format tensorrt --run-eval --debug --fp16 --cache \
     --output "${output}" \
     --config-file ../../${config} \
     MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt_fp16.txt
 
-./caffe2_converter.py --format tensorrt --run-eval --debug --int8 \
+./caffe2_converter.py --format tensorrt --run-eval --debug --int8 --cache \
     --output "${output}" \
     --config-file ../../${config} \
     MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt_int8.txt

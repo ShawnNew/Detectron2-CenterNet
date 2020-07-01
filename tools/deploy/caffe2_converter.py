@@ -163,4 +163,8 @@ if __name__ == "__main__":
         metrics = inference_on_dataset(model, data_loader, evaluator)
         print_csv_format(metrics)
         if args.format == "tensorrt":
-            model.report_engine_time("engine_time.txt", 0.5)
+            if args.fp16 or args.int8:
+                threshold = 0.1
+            else:
+                threshold = 0.5
+            model.report_engine_time("engine_time.txt", threshold)
