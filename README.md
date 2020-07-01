@@ -1,3 +1,12 @@
+This is re-implementation of CenterNet based on detectron2, please 
+use `configs/COCO-Detection/ctdet_dla_34_1x.yaml` for centernet
+configuration. 
+
+**Note** that inital weights is very important if you
+want to train centernet (because of DLA part). Please download
+initial weights file from here and change `WEIGHTS` field in
+the config file.
+
 <img src=".github/Detectron2-Logo-Horz.svg" width="300" >
 
 Detectron2 is Facebook AI Research's next generation software system
