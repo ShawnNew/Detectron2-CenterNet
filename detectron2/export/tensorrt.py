@@ -12,9 +12,11 @@ from detectron2.modeling import meta_arch
 from detectron2.modeling.anchor_generator import build_anchor_generator
 from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
+from termcolor import colored
 
 from .meta_modeling import RetinaNetModel
 from .onnx_tensorrt import backend
+from .onnx_tensorrt.calibrator import PythonEntropyCalibrator
 from .onnx_tensorrt.tensorrt_engine import Engine
 
 logger = logging.getLogger(__name__)
@@ -79,8 +81,11 @@ class TensorRTModel:
     @classmethod
     def build_engine(cls, onnx_f, engine_f, max_batch_size, max_workspace_size=None, device=None,
                      fp16_mode=False, int8_mode=False, int8_calibrator=None):
+        if fp16_mode:
+            logger.info(colored("set fp16 mode enabled", "blue"))
         if int8_mode:
             assert int8_calibrator is not None, "Calibrator is not set with int8 mode used."
+            logger.info(colored("set int8 mode enabled", "blue"))
         assert device is not None, device
 
         onnx_model = onnx.load(onnx_f)
@@ -98,6 +103,10 @@ class TensorRTModel:
             engine = engine.engine.engine
             f.write(engine.serialize())
         logger.info("TensorRT engine is saved to {}".format(engine_f))
+
+    @classmethod
+    def get_int8_calibrator(cls, max_calibration_batch, data_loader, preprocess_f, cache_file):
+        return PythonEntropyCalibrator(max_calibration_batch, data_loader, preprocess_f, cache_file)
 
 
 class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):

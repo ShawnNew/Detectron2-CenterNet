@@ -56,6 +56,8 @@ if __name__ == "__main__":
     parser.add_argument("--run-eval", action="store_true")
     parser.add_argument("--cache", action="store_true")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--int8", action="store_true")
     parser.add_argument("--output", help="output directory for the converted model")
     parser.add_argument(
         "opts",
@@ -65,7 +67,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     if args.debug:
-        verbosity=logging.DEBUG
+        verbosity = logging.DEBUG
     else:
         verbosity = logging.INFO
     logger = setup_logger(verbosity=verbosity)
@@ -80,7 +82,8 @@ if __name__ == "__main__":
 
     # get a sample data
     data_loader = build_detection_test_loader(cfg, cfg.DATASETS.TEST[0])
-    first_batch = next(iter(data_loader))
+    data_iter = iter(data_loader)
+    first_batch = next(data_iter)
 
     # convert and save caffe2 model
     tracer = Caffe2Tracer(cfg, torch_model, first_batch)
@@ -110,14 +113,32 @@ if __name__ == "__main__":
         with open(os.path.join(args.output, "model.txt"), "w") as f:
             f.write(str(script_model))
     elif args.format == "tensorrt":
+        suffix = "_fp16" if args.fp16 else ""
+        suffix += "_int8" if args.int8 else ""
         onnx_f = os.path.join(args.output, "model.onnx")
-        engine_f = os.path.join(args.output, "model.trt")
+        engine_f = os.path.join(args.output, "model{}.trt".format(suffix))
+        cache_f = os.path.join(args.output, "cache.txt")
         assert os.path.isfile(onnx_f), "path {} is not a file".format(onnx_f)
         if not os.path.isfile(engine_f) or (not args.cache and override(engine_f)):
-            TensorRTModel.build_engine(onnx_f, engine_f, cfg.TEST.BATCH_SIZE, device=cfg.MODEL.DEVICE.upper())
+            if args.int8:
+                # get preprocess function from model
+                model = tracer.get_onnx_traceable()
+                max_calibration_batch = 100
+                if os.path.exists(cache_f):
+                    os.remove(cache_f)
+                int8_calibrator = TensorRTModel.get_int8_calibrator(
+                    max_calibration_batch, data_loader, model.convert_inputs, cache_f)
+            else:
+                int8_calibrator = None
+            TensorRTModel.build_engine(onnx_f, engine_f, cfg.TEST.BATCH_SIZE, device=cfg.MODEL.DEVICE.upper(),
+                                       fp16_mode=args.fp16, int8_mode=args.int8, int8_calibrator=int8_calibrator)
+            # release data iter
+            if int8_calibrator is not None:
+                del int8_calibrator
 
     # GC
     del first_batch
+    del data_iter
     del data_loader
     del tracer
     del torch_model
@@ -129,7 +150,7 @@ if __name__ == "__main__":
             model = traceable_model
         elif args.format == "tensorrt":
             MetaArch = META_ARCH_TENSORRT_EXPORT_TYPE_MAP[cfg.MODEL.META_ARCHITECTURE]
-            model = MetaArch(cfg, os.path.join(args.output, "model.trt"))
+            model = MetaArch(cfg, engine_f)
             model.to(torch.device(cfg.MODEL.DEVICE))
         else:
             model = caffe2_model

@@ -146,6 +146,11 @@ class Caffe2Tracer:
         with torch.no_grad():
             return torch.jit.trace(model, (inputs,), optimize=True)
 
+    def get_onnx_traceable(self):
+        MetaArch = META_ARCH_ONNX_EXPORT_TYPE_MAP[self.cfg.MODEL.META_ARCHITECTURE]
+        model = MetaArch(self.cfg, copy.deepcopy(self.model))
+        return model
+
 
 def export_caffe2_model(cfg, model, inputs):
     """

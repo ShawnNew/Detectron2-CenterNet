@@ -263,14 +263,14 @@ def remove_copy_between_cpu_and_gpu(onnx_model):
     """
 
     def _rename_node_input_output(_node, _src, _dst):
-        for i, name in enumerate(_node.input):
+        for _i, name in enumerate(_node.input):
             if name == _src:
                 logger.info("rename {} input: {} -> {}".format(_node.name, _src, _dst))
-                _node.input[i] = _dst
-        for i, name in enumerate(_node.output):
+                _node.input[_i] = _dst
+        for _i, name in enumerate(_node.output):
             if name == _src:
                 logger.info("rename {} output: {} -> {}".format(_node.name, _src, _dst))
-                _node.output[i] = _dst
+                _node.output[_i] = _dst
 
     _COPY_OPS = ["CopyCPUToGPU", "CopyGPUToCPU"]
 

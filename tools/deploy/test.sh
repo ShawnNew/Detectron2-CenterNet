@@ -2,6 +2,12 @@
 set -e
 set -x
 
+# # Example
+# batch_size=4 \
+#    config=configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x.yaml \
+#    weights=/autox/users/dongqixu/envs/model_zoo/mask_rcnn_R_50_FPN_1x.pkl \
+#    network=mask_rcnn ./tools/deploy/test.sh
+
 : \
   "${batch_size:=4}" \
   "${config:=configs/COCO-Detection/retinanet_R_50_FPN_1x.yaml}" \
@@ -29,3 +35,18 @@ cd tools/deploy || exit
     --output "${output}" \
     --config-file ../../${config} \
     MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt.txt
+
+./caffe2_converter.py --format tensorrt --run-eval --debug --fp16 \
+    --output "${output}" \
+    --config-file ../../${config} \
+    MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt_fp16.txt
+
+./caffe2_converter.py --format tensorrt --run-eval --debug --int8 \
+    --output "${output}" \
+    --config-file ../../${config} \
+    MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt_int8.txt
+
+./caffe2_converter.py --format tensorrt --run-eval --debug --fp16 --int8 \
+    --output "${output}" \
+    --config-file ../../${config} \
+    MODEL.WEIGHTS ${weights} INPUT.DYNAMIC False TEST.BATCH_SIZE ${batch_size} | tee "${output}"/tensorrt_fp16_int8.txt
