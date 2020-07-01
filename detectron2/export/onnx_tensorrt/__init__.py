@@ -20,4 +20,21 @@
 
 from __future__ import absolute_import
 
+import torch
+
 from . import backend
+
+
+def to_cuda(tensor):
+    """
+    Convert tensor to cuda tensor.
+    """
+    assert isinstance(tensor, torch.Tensor), type(tensor)
+    if not tensor.is_cuda:
+        tensor = tensor.cuda()
+    if tensor.dtype == torch.int64:
+        casted_tensor = tensor.to(dtype=torch.int32)
+        assert torch.equal(tensor, casted_tensor.to(dtype=tensor.dtype)), \
+            "fail to cast tensor with dtype {}".format(tensor.dtype)
+        tensor = casted_tensor
+    return tensor

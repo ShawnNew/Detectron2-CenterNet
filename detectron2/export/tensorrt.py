@@ -15,7 +15,7 @@ from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
 from termcolor import colored
 
 from .meta_modeling import RetinaNetModel
-from .onnx_tensorrt import backend
+from .onnx_tensorrt import backend, to_cuda
 from .onnx_tensorrt.calibrator import PythonEntropyCalibrator
 from .onnx_tensorrt.tensorrt_engine import Engine
 
@@ -33,21 +33,6 @@ def to_numpy(tensor):
         tensor = tensor.to(dtype=torch.int)
     return tensor.detach().cpu().numpy() if tensor.requires_grad \
         else tensor.cpu().numpy()
-
-
-def to_cuda(tensor):
-    """
-    Convert tensor to cuda tensor.
-    """
-    assert isinstance(tensor, torch.Tensor), type(tensor)
-    if not tensor.is_cuda:
-        tensor = tensor.cuda()
-    if tensor.dtype == torch.int64:
-        casted_tensor = tensor.to(dtype=torch.int32)
-        assert torch.equal(tensor, casted_tensor.to(dtype=tensor.dtype)), \
-            "fail to cast tensor with dtype {}".format(tensor.dtype)
-        tensor = casted_tensor
-    return tensor
 
 
 class TensorRTModel:

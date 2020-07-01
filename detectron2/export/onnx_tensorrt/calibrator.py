@@ -5,8 +5,8 @@ import re
 import pycuda.driver
 import tensorrt as trt
 
+from . import to_cuda
 from .tensorrt_engine import Holder, torch_to_numpy_dtype
-from ..tensorrt import to_cuda
 
 logger = logging.getLogger(__name__)
 
