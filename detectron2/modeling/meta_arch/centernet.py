@@ -1,6 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import numpy as np
-from typing import List
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -9,7 +8,7 @@ from detectron2.structures import Boxes, ImageList, Instances
 from ..postprocessing import detector_postprocess
 from ..backbone import dla34, DLAUp, IDAUp
 from .build import META_ARCH_REGISTRY
-from detectron2.data.catalog import MetadataCatalog
+from detectron2.data.catalog import MetadataCatalog, DatasetCatalog
 from detectron2.data.detection_utils import gen_heatmap
 
 __all__ = [
@@ -42,11 +41,17 @@ class CenterNet(nn.Module):
         self.hm_weight                = cfg.MODEL.CENTERNET.HM_WEIGHT
         self.wh_weight                = cfg.MODEL.CENTERNET.WH_WEIGHT
         self.off_weight               = cfg.MODEL.CENTERNET.OFF_WEIGHT
+        # inference
+        self.score_threshold          = cfg.MODEL.CENTERNET.SCORE_THRESH_TEST
+        self.topk_candidates          = cfg.MODEL.CENTERNET.TOPK_CANDIDATES_TEST
+        self.max_detections_per_image = cfg.TEST.DETECTIONS_PER_IMAGE
         # fmt: on
 
         # other
-        self.max_detections_per_image = cfg.TEST.DETECTIONS_PER_IMAGE
-        self.meta = MetadataCatalog.get(cfg.DATASETS.TRAIN[0])
+        given_dataset = cfg.DATASETS.TRAIN[0]
+        DatasetCatalog.get(given_dataset)
+        self.meta = MetadataCatalog.get(given_dataset)
+        self.num_classes = len(self.meta.thing_classes) # modify num_classes by meta data of given dataset
         self.heads["HM"] = self.num_classes
         self.register_buffer("pixel_mean", torch.Tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1))
         self.register_buffer("pixel_std", torch.Tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1))
@@ -192,14 +197,28 @@ class CenterNet(nn.Module):
         :return:
         """
 
+        # decode centernet output and keep top k top scoring indices.
         boxes_all, scores_all, class_idxs_all = ctdet_decode(output['hm'],
                                                              output['wh'],
                                                              reg=output['reg'],
-                                                             down_ratio=self.down_ratio)
+                                                             down_ratio=self.down_ratio,
+                                                             K=self.topk_candidates)
+
+        # take max number of detections per image
+        max_num_detections_per_image = min(self.max_detections_per_image, self.topk_candidates)
+        scores_all = scores_all[:max_num_detections_per_image]
+        boxes_all = boxes_all[:max_num_detections_per_image]
+        class_idxs_all = class_idxs_all[:max_num_detections_per_image]
+
+        # filter out by threshold
+        keep_idxs = scores_all > self.score_threshold
+        scores_all = scores_all[keep_idxs]
+        boxes_all = boxes_all[keep_idxs]
+        class_idxs_all = class_idxs_all[keep_idxs]
         result = Instances(image_size)
-        result.pred_boxes = Boxes(boxes_all[:self.max_detections_per_image])
-        result.scores = scores_all[:self.max_detections_per_image]
-        result.pred_classes = class_idxs_all[:self.max_detections_per_image]
+        result.pred_boxes = Boxes(boxes_all)
+        result.scores = scores_all
+        result.pred_classes = class_idxs_all
         return result
 
 
