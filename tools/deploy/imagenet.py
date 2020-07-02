@@ -11,6 +11,7 @@ import torchvision.datasets as datasets
 import torchvision.models
 import torchvision.transforms as transforms
 from detectron2.export.meta_modeling import MetaModel, trace_context
+from detectron2.export.tensorrt import TensorRTModel
 from detectron2.utils.logger import setup_logger
 
 
@@ -120,6 +121,12 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
+def fill_trt_inputs(tensor, batch_size):
+    zeros = torch.zeros(1, *tensor.shape[1:], dtype=tensor.dtype, device=tensor.device)
+    padding = [zeros for _ in range(batch_size - tensor.size(0))]
+    return torch.cat([tensor, *padding], dim=0)
+
+
 # ##### core element ########################################
 
 
@@ -133,7 +140,7 @@ class TorchModel(MetaModel):
         images, target = data
         return images.cuda()
 
-    def convert_outputs(self, batched_inputs, inputs, results):
+    def convert_outputs(self, data, images, results):
         # no postprocessing step is needed for pytorch model
         return results
 
@@ -146,6 +153,31 @@ class TorchModel(MetaModel):
 
     def get_output_names(self):
         return ["prob"]
+
+
+class TensorRTEngine(TensorRTModel, TorchModel):
+
+    def __init__(self, engine_path, batch_size):
+        super(TensorRTEngine, self).__init__(engine_path)
+        TorchModel.__init__(self, self._engine)
+
+        self.batch_size = batch_size
+        self.effective_batch_size = 0
+
+    def convert_inputs(self, data):
+        images, target = data
+        # TensorRT only supports fixed size inputs
+        self.effective_batch_size = images.size(0)
+        if self.effective_batch_size < self.batch_size:
+            images = fill_trt_inputs(images, self.batch_size)
+        return {"images": images.cuda()}
+
+    def convert_outputs(self, data, inputs, results):
+        assert len(results) == 1
+        output = results[0]
+        if self.effective_batch_size < self.batch_size:
+            output = output[:self.effective_batch_size]
+        return output
 
 
 def get_data_loader(val_dir, batch_size, workers=2):
@@ -207,6 +239,12 @@ def main():
                 torch.onnx.export(model, (inputs,), onnx_f, verbose=True, input_names=model.get_input_names(),
                                   output_names=model.get_output_names())
                 return
+    else:
+        if not os.path.exists(engine_f):
+            TensorRTModel.build_engine(onnx_f, engine_f, args.batch_size, device="CUDA",
+                                       fp16_mode=False, int8_mode=False, int8_calibrator=None)
+        model = TensorRTEngine(engine_f, args.batch_size)
+        model.cuda()
 
     # validation
     validate(data_loader, model)
