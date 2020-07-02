@@ -1,4 +1,6 @@
 import argparse
+import functools
+import logging
 import os
 import time
 import types
@@ -124,7 +126,7 @@ def accuracy(output, target, topk=(1,)):
 def fill_trt_inputs(tensor, batch_size):
     zeros = torch.zeros(1, *tensor.shape[1:], dtype=tensor.dtype, device=tensor.device)
     padding = [zeros for _ in range(batch_size - tensor.size(0))]
-    return torch.cat([tensor, *padding], dim=0)
+    return torch.cat([tensor, *padding], dim=0).contiguous()
 
 
 # ##### core element ########################################
@@ -208,6 +210,10 @@ def main():
                              "batch size of all GPUs on the current node when "
                              "using Data Parallel or Distributed Data Parallel")
     parser.add_argument("--output", default="./output", help="output directory for the converted model")
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--int8", action="store_true")
+    parser.add_argument("--calibration-batch", type=int, default=1024, help="max calibration batch number")
     parser.add_argument(
         "--format",
         choices=["torch", "onnx", "tensorrt"],
@@ -215,9 +221,12 @@ def main():
         default="torch",
     )
     args = parser.parse_args()
-
-    # setup detectron2 logger
-    setup_logger()
+    if args.debug:
+        verbosity = logging.DEBUG
+    else:
+        verbosity = logging.INFO
+    logger = setup_logger(verbosity=verbosity)
+    logger.info("Command line arguments: " + str(args))
 
     if args.output:
         os.makedirs(args.output, exist_ok=True)
@@ -241,13 +250,25 @@ def main():
                 return
     else:
         if not os.path.exists(engine_f):
+            if args.int8:
+                ns = types.SimpleNamespace()
+                ns.batch_size = args.batch_size
+                ns.effective_batch_size = 0
+                preprocess = functools.partial(TensorRTEngine.convert_inputs, ns)
+                int8_calibrator = TensorRTModel.get_int8_calibrator(
+                    args.calibration_batch, data_loader, preprocess, cache_f)
+            else:
+                int8_calibrator = None
             TensorRTModel.build_engine(onnx_f, engine_f, args.batch_size, device="CUDA",
-                                       fp16_mode=False, int8_mode=False, int8_calibrator=None)
+                                       fp16_mode=args.fp16, int8_mode=args.int8, int8_calibrator=int8_calibrator)
         model = TensorRTEngine(engine_f, args.batch_size)
         model.cuda()
 
     # validation
     validate(data_loader, model)
+
+    if args.format == "tensorrt":
+        model.report_engine_time("engine_time.txt", 0.01)
 
 
 if __name__ == "__main__":
