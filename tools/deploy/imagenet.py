@@ -202,9 +202,9 @@ def get_data_loader(val_dir, batch_size, workers=2):
 def main():
     parser = argparse.ArgumentParser(description="ImageNet inference example")
     parser.add_argument("data", metavar="DIR", help="path to dataset")
-    parser.add_argument("-j", "--workers", default=2, type=int, metavar="N",
+    parser.add_argument("-j", "--workers", default=4, type=int, metavar="N",
                         help="number of data loading workers (default: 2)")
-    parser.add_argument("-b", "--batch-size", default=32, type=int,
+    parser.add_argument("-b", "--batch-size", default=1024, type=int,
                         metavar="N",
                         help="mini-batch size (default: 32), this is the total "
                              "batch size of all GPUs on the current node when "
@@ -238,7 +238,7 @@ def main():
     data_loader = get_data_loader(args.data, args.batch_size, args.workers)
 
     if args.format == "torch" or args.format == "onnx":
-        torch_model = torchvision.models.resnet18(pretrained=True)
+        torch_model = torchvision.models.resnet50(pretrained=True)
         torch_model.cuda()
         model = TorchModel(torch_model)
         if args.format == "onnx":
