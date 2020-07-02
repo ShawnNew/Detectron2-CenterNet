@@ -78,3 +78,11 @@ cd tools/deploy
   --config-file configs/COCO-PanopticSegmentation/panoptic_fpn_R_50_1x.yaml \
   --eval-only MODEL.WEIGHTS /autox/users/dongqixu/envs/model_zoo/panoptic_fpn_R_50_1x.pkl TEST.BATCH_SIZE 4
 ```
+
+**resnet50**
+
+|    Format    | Batch size | Inf time (s) | Top1   | Top5   | Engine time (ms) |
+| :----------: | :--------: | :----------: | :----: | :----: | :--------------: |
+| torchvision  | 1024       | 1.9038       | 76.130 | 92.862 | -                |
+| TensorRT     | 1024       | 1.9130       | 76.130 | 92.862 | 613.5728         |
+| INT8         | 1024       | 1.9263       | 76.038 | 92.864 | 74.9226          |

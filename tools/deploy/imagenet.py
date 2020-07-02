@@ -98,10 +98,9 @@ def validate(val_loader, model, cuda=True, print_freq=20):
 
             if i % print_freq == 0:
                 progress.display(i)
-    print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
-          .format(top1=top1, top5=top5), flush=True)
-    print(' * Err@1 {top1.err:.3f} Err@5 {top5.err:.3f}'
-          .format(top1=top1, top5=top5), flush=True)
+    print("Time {:.4f}".format(batch_time.avg), flush=True)
+    print("Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}".format(top1=top1, top5=top5), flush=True)
+    print("Err@1 {top1.err:.3f} Err@5 {top5.err:.3f}".format(top1=top1, top5=top5), flush=True)
 
 
 def accuracy(output, target, topk=(1,)):
@@ -154,7 +153,7 @@ class TorchModel(MetaModel):
         return ["images"]
 
     def get_output_names(self):
-        return ["prob"]
+        return ["logits"]
 
 
 class TensorRTEngine(TensorRTModel, TorchModel):
@@ -244,7 +243,7 @@ def main():
         if args.format == "onnx":
             data = next(iter(data_loader))
             inputs = model.convert_inputs(data)
-            with trace_context(model):
+            with trace_context(model), torch.no_grad():
                 torch.onnx.export(model, (inputs,), onnx_f, verbose=True, input_names=model.get_input_names(),
                                   output_names=model.get_output_names())
                 return

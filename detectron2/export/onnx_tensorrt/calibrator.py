@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import struct
 
 import pycuda.driver
 import tensorrt as trt
@@ -89,3 +90,16 @@ class PythonEntropyCalibrator(trt.tensorrt.IInt8EntropyCalibrator2):
         with open(self.cache_file, "wb") as f:
             logger.info("Write calibration cache to {}".format(self.cache_file))
             f.write(cache)
+
+
+def decode_calibration_cache(cache_f):
+    table = {}
+    with open(cache_f) as f:
+        cache = f.read().splitlines()
+        logger.info(cache[0])
+        for pair in cache[1:]:
+            layer_name, scale = pair.replace(":", "").rsplit(maxsplit=1)
+            scale = struct.unpack("!f", bytes.fromhex(scale))[0] * (2 ** 7 - 1)
+            print("{:60} {:12.4f}".format(layer_name, scale))
+            table[layer_name] = scale
+    return table
