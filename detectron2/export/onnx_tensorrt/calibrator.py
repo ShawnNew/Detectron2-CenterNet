@@ -19,19 +19,36 @@ class PythonEntropyCalibrator(trt.tensorrt.IInt8EntropyCalibrator2):
         self.preprocess_f = preprocess_f
         self.cache_file = cache_file
 
-        self.iter = iter(self.data_loader)
+        self.iter = None
         self.index = 0
         self.bindings = []
 
     def __del__(self):
         del self.iter
 
+    def check_input_validity(self, network):
+        data_iter = iter(self.data_loader)
+        m_inputs = self.preprocess_f(next(data_iter))
+        assert isinstance(m_inputs, dict), type(m_inputs)
+        # check input shape and dtype
+        for i in range(network.num_inputs):
+            binding = network.get_input(i)
+            name = re.sub("^__", "", binding.name)
+            assert name in m_inputs, name
+            assert tuple(m_inputs[name].shape) == tuple(binding.shape), "{} != {}".format(
+                tuple(m_inputs[name].shape), tuple(binding.shape))
+        # release iterator
+        del data_iter
+        self.iter = iter(self.data_loader)
+
     def get_batch(self, names):
+        assert self.iter is not None, "self.iter is not initialized!"
         logger.info("Get batch with inputs: {}".format(", ".join(names)))
         try:
             if self.index >= self.max_calibration_batch:
                 return None
 
+            logger.info("calibration batch {}".format(self.index))
             batched_inputs = next(self.iter)
             m_inputs = self.preprocess_f(batched_inputs)
             self.index += 1

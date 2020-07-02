@@ -108,7 +108,7 @@ class TensorRTBackendRep(BackendRep):
             self.builder.int8_mode = kwargs["int8_mode"]
             assert not kwargs["int8_mode"] or self.builder.platform_has_fast_int8
             if self.builder.int8_mode:
-                self.builder.int8_calibrator = kwargs['int8_calibrator']
+                self.builder.int8_calibrator = kwargs["int8_calibrator"]
 
         logger.info("NetworkDefinition:")
         for layer in self.network:
@@ -119,13 +119,16 @@ class TensorRTBackendRep(BackendRep):
             print("{:40} : {:30} -> {:30}".format(layer.name, ", ".join(input_shape), ", ".join(output_shape)))
         logger.info("NetworkInput:")
         for i in range(self.network.num_inputs):
-            layer = self.network.get_input(i)
-            print(layer.name, layer.shape)
+            tensor = self.network.get_input(i)
+            print(tensor.name, tensor.shape)
         logger.info("NetworkOutput:")
         for i in range(self.network.num_outputs):
-            layer = self.network.get_output(i)
-            print(layer.name, layer.shape)
+            tensor = self.network.get_output(i)
+            print(tensor.name, tensor.shape)
 
+        if self.builder.int8_mode:
+            int8_calibrator = kwargs["int8_calibrator"]
+            int8_calibrator.check_input_validity(self.network)
         trt_engine = self.builder.build_cuda_engine(self.network)
         if trt_engine is None:
             raise RuntimeError("Failed to build TensorRT engine from network")
