@@ -58,6 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--int8", action="store_true")
+    parser.add_argument("--calibration-batch", type=int, default=512, help="max calibration batch number")
     parser.add_argument("--output", help="output directory for the converted model")
     parser.add_argument(
         "opts",
@@ -123,7 +124,7 @@ if __name__ == "__main__":
             if args.int8:
                 # get preprocess function from model
                 model = tracer.get_onnx_traceable()
-                max_calibration_batch = 100
+                max_calibration_batch = args.calibration_batch
                 if os.path.exists(cache_f) and (not args.cache and override(cache_f)):
                     os.remove(cache_f)
                 int8_calibrator = TensorRTModel.get_int8_calibrator(
@@ -167,4 +168,11 @@ if __name__ == "__main__":
                 threshold = 0.1
             else:
                 threshold = 0.5
-            model.report_engine_time("engine_time.txt", threshold)
+            engine_time = model.report_engine_time("engine_time.txt", threshold)
+            # write performance to file
+            perf_f = os.path.join(args.output, "perf.txt")
+            with open(perf_f, "w") as f:
+                f.write("engine {}\n".format(os.path.abspath(engine_f)))
+                f.write("time {}\n".format(engine_time))
+                for k, v in metrics.items():
+                    f.write("{} {}\n".format(k, v["AP"]))

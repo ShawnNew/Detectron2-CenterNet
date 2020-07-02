@@ -319,8 +319,11 @@ class Engine(object):
 
     def report_engine_time(self, filename: str, threshold: float):
         if Profiler is not None:
-            self.context.profiler.report_engine_time(filename, threshold)
+            engine_time = self.context.profiler.report_engine_time(filename, threshold)
+        else:
+            engine_time = self.engine_time / self.count
         logger.info("Average engine time: {:.4f} ms".format(self.engine_time / self.count))
+        return engine_time
 
     @property
     def binding_addrs(self):

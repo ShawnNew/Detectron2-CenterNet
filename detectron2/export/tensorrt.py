@@ -61,7 +61,7 @@ class TensorRTModel:
             raise NotImplementedError
 
     def report_engine_time(self, filename: str, threshold: float):
-        self._engine.report_engine_time(filename, threshold)
+        return self._engine.report_engine_time(filename, threshold)
 
     @classmethod
     def build_engine(cls, onnx_f, engine_f, max_batch_size, max_workspace_size=None, device=None,
