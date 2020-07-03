@@ -65,7 +65,7 @@ class TensorRTModel:
 
     @classmethod
     def build_engine(cls, onnx_f, engine_f, max_batch_size, max_workspace_size=None, device=None,
-                     fp16_mode=False, int8_mode=False, int8_calibrator=None):
+                     fp16_mode=False, int8_mode=False, int8_calibrator=None, quantization_layers=None):
         if fp16_mode:
             logger.info(colored("set fp16 mode enabled", "blue"))
         if int8_mode:
@@ -81,7 +81,8 @@ class TensorRTModel:
         start_time = time.perf_counter()
         engine = backend.prepare(onnx_model, device, max_batch_size=max_batch_size,
                                  max_workspace_size=max_workspace_size, serialize_engine=True,
-                                 fp16_mode=fp16_mode, int8_mode=int8_mode, int8_calibrator=int8_calibrator)
+                                 fp16_mode=fp16_mode, int8_mode=int8_mode, int8_calibrator=int8_calibrator,
+                                 quantization_layers=quantization_layers)
         total_time = time.perf_counter() - start_time
         logger.info("Engine build time: {:.2f} s".format(total_time))
         with open(engine_f, "wb") as f:

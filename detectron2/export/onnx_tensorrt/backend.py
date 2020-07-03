@@ -28,6 +28,7 @@ import logging
 import numpy as np
 import onnx
 import six
+import struct
 import tensorrt as trt
 from onnx import helper as onnx_helper
 from onnx.backend.base import Backend, BackendRep, Device, DeviceType, namedtupledict
@@ -57,10 +58,23 @@ def count_trailing_ones(vals):
     return count
 
 
+def decode_calibration_cache(cache_f):
+    table = {}
+    with open(cache_f) as f:
+        cache = f.read().splitlines()
+        logger.info(cache[0])
+        for pair in cache[1:]:
+            layer_name, scale = pair.replace(":", "").rsplit(maxsplit=1)
+            scale = struct.unpack("!f", bytes.fromhex(scale))[0] * (2 ** 7 - 1)
+            # print("{:60} {:12.4f}".format(layer_name, scale))
+            table[layer_name] = scale
+    return table
+
+
 _config = Config()
 
 if _config.USE_PYBIND:
-    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+    TRT_LOGGER = trt.Logger(trt.Logger.VERBOSE)
 
 if not _config.USE_PYBIND:
     # from . import parser
@@ -107,7 +121,7 @@ class TensorRTBackendRep(BackendRep):
         if "int8_mode" in kwargs:
             self.builder.int8_mode = kwargs["int8_mode"]
             assert not kwargs["int8_mode"] or self.builder.platform_has_fast_int8
-            if self.builder.int8_mode:
+            if self.builder.int8_mode and kwargs["quantization_layers"] is None:
                 self.builder.int8_calibrator = kwargs["int8_calibrator"]
 
         logger.info("NetworkDefinition:")
@@ -126,7 +140,22 @@ class TensorRTBackendRep(BackendRep):
             tensor = self.network.get_output(i)
             print(tensor.name, tensor.shape)
 
-        if self.builder.int8_mode:
+        if self.builder.int8_mode and kwargs["quantization_layers"] is not None:
+            quantization_layers = kwargs["quantization_layers"]
+            table = decode_calibration_cache(kwargs["int8_calibrator"].cache_file)
+
+            for layer in self.network:
+                if layer.name in quantization_layers:
+                    for i in range(layer.num_inputs):
+                        tensor = layer.get_input(i)
+                        value = table[tensor.name]
+                        tensor.dynamic_range = (-value, value)
+                    for i in range(layer.num_outputs):
+                        tensor = layer.get_output(i)
+                        value = table[tensor.name]
+                        tensor.dynamic_range = (-value, value)
+
+        if self.builder.int8_mode and kwargs["quantization_layers"] is None:
             int8_calibrator = kwargs["int8_calibrator"]
             int8_calibrator.check_input_validity(self.network)
         trt_engine = self.builder.build_cuda_engine(self.network)

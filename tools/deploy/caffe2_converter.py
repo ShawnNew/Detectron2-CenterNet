@@ -59,7 +59,10 @@ if __name__ == "__main__":
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--int8", action="store_true")
     parser.add_argument("--calibration-batch", type=int, default=512, help="max calibration batch number")
+    parser.add_argument("--calibration-cache", help="output calibration cache path")
+    parser.add_argument("--quantization", help="input quantization layers definition")
     parser.add_argument("--output", help="output directory for the converted model")
+    parser.add_argument("--onnx", help="output onnx model path")
     parser.add_argument(
         "opts",
         help="Modify config options using the command-line",
@@ -95,7 +98,7 @@ if __name__ == "__main__":
         caffe2_model.save_graph(os.path.join(args.output, "model.svg"), inputs=first_batch)
     elif args.format == "onnx":
         traceable_model, onnx_model = tracer.export_onnx()
-        onnx.save(onnx_model, os.path.join(args.output, "model.onnx"))
+        onnx.save(onnx_model, args.onnx if args.onnx else os.path.join(args.output, "model.onnx"))
         del onnx_model
     elif args.format == "torchscript":
         script_model = tracer.export_torchscript()
@@ -116,9 +119,9 @@ if __name__ == "__main__":
     elif args.format == "tensorrt":
         suffix = "_fp16" if args.fp16 else ""
         suffix += "_int8" if args.int8 else ""
-        onnx_f = os.path.join(args.output, "model.onnx")
+        onnx_f = args.onnx if args.onnx else os.path.join(args.output, "model.onnx")
         engine_f = os.path.join(args.output, "model{}.trt".format(suffix))
-        cache_f = os.path.join(args.output, "cache.txt")
+        cache_f = args.calibration_cache if args.calibration_cache else os.path.join(args.output, "cache.txt")
         assert os.path.isfile(onnx_f), "path {} is not a file".format(onnx_f)
         if not os.path.isfile(engine_f) or (not args.cache and override(engine_f)):
             if args.int8:
@@ -129,10 +132,20 @@ if __name__ == "__main__":
                     os.remove(cache_f)
                 int8_calibrator = TensorRTModel.get_int8_calibrator(
                     max_calibration_batch, data_loader, model.convert_inputs, cache_f)
+                if args.quantization:
+                    quantization_layers = []
+                    with open(args.quantization) as f:
+                        for line in f:
+                            quantization_layers.append(line.strip())
+                    logger.info("quantization_layers: {}".format(quantization_layers))
+                else:
+                    quantization_layers = None
             else:
                 int8_calibrator = None
+                quantization_layers = None
             TensorRTModel.build_engine(onnx_f, engine_f, cfg.TEST.BATCH_SIZE, device=cfg.MODEL.DEVICE.upper(),
-                                       fp16_mode=args.fp16, int8_mode=args.int8, int8_calibrator=int8_calibrator)
+                                       fp16_mode=args.fp16, int8_mode=args.int8, int8_calibrator=int8_calibrator,
+                                       quantization_layers=quantization_layers)
             # release data iter
             if int8_calibrator is not None:
                 del int8_calibrator
