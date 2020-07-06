@@ -2,17 +2,16 @@ MODEL:
   META_ARCHITECTURE: "CenterNet"
   PIXEL_MEAN: [0.408, 0.447, 0.470]
   PIXEL_STD: [0.289, 0.274, 0.278]
-  WEIGHTS: '/autox-sz/users/chenxiaoniu/centernet_init.pth'
 DATASETS:
   TRAIN: ("bulb_wise_tl_train",)
   TEST: ("bulb_wise_tl_train",)
 SOLVER:
   IMS_PER_BATCH: 8
   BASE_LR: 2.5e-4  # Note that RetinaNet uses a different default learning rate
-  STEPS: (30000, 40000)
-  MAX_ITER: 50000
-  CHECKPOINT_PERIOD: 2000
-TEST:
-  EVAL_PERIOD: 2000
-OUTPUT_DIR: "./output/centernet-bulb"
+  STEPS: (79500, 106000)
+  MAX_ITER: 132500
+  CHECKPOINT_PERIOD: 5300
+#TEST:
+#  EVAL_PERIOD: 1
+OUTPUT_DIR: "./output/centernet-bulb-finetune-0706-debug"
 VERSION: 2

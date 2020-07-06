@@ -584,7 +584,7 @@ def build_augmentation(cfg, is_train):
     augmentation.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
     if is_train:
         augmentation.append(T.RandomFlip())
-        logger.info("TransformGens used in training: " + str(augmentation))
+        logger.info("Augmentations used in training: " + str(augmentation))
     return augmentation
 
 

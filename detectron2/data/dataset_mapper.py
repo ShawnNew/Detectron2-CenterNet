@@ -48,7 +48,6 @@ class DatasetMapper:
         self.mask_format    = cfg.INPUT.MASK_FORMAT
         self.keypoint_on    = cfg.MODEL.KEYPOINT_ON
         self.load_proposals = cfg.MODEL.LOAD_PROPOSALS
-        self.down_ratio     = cfg.MODEL.CENTERNET.DOWN_RATIO
         # fmt: on
         if self.keypoint_on and is_train:
             # Flip only makes sense in training
@@ -89,7 +88,6 @@ class DatasetMapper:
         image, sem_seg_gt = aug_input.image, aug_input.sem_seg
 
         image_shape = image.shape[:2]  # h, w
-
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
@@ -142,5 +140,4 @@ class DatasetMapper:
             if self.compute_tight_boxes and instances.has("gt_masks"):
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             dataset_dict["instances"] = utils.filter_empty_instances(instances)
-
         return dataset_dict
