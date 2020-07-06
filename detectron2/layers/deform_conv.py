@@ -502,7 +502,16 @@ class DeformConvV2(nn.Module):
             nn.BatchNorm2d(cho, momentum=0.1),
             nn.ReLU(inplace=True)
         )
-        self.conv = DCN(chi, cho, kernel_size=(3,3), stride=1, padding=1, dilation=1, deformable_groups=1)
+        self.conv = DCN(
+            chi,
+            cho,
+            kernel_size=(3,3),
+            stride=1,
+            padding=1,
+            dilation=1,
+            deformable_groups=1
+        )
+        nn.init.uniform_(self.actf[0].weight.data)
 
     def forward(self, x):
         x = self.conv(x)

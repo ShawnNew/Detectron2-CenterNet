@@ -59,7 +59,7 @@ class CenterNet(nn.Module):
         self.first_level = int(np.log2(self.down_ratio))
 
         # self modules
-        self.base = dla34(pretrained=False)
+        self.base = dla34(pretrained=True)
         channels = self.base.channels
         out_channel = channels[self.first_level]
         scales = [2 ** i for i in range(len(channels[self.first_level:]))]
@@ -77,7 +77,7 @@ class CenterNet(nn.Module):
                     nn.Conv2d(head_conv, classes,
                               kernel_size=final_kernel, stride=1,
                               padding=final_kernel // 2, bias=True))
-                if 'hm' in head:
+                if 'hm' in head.lower():
                     fc[-1].bias.data.fill_(-2.19)
                 else:
                     fill_fc_weights(fc)
@@ -107,9 +107,15 @@ class CenterNet(nn.Module):
 
         z = {}
         for head in self.heads:
-            z[head.lower()] = self.__getattr__(head.lower())(y[-1])
-
-        z['hm'] = torch.clamp(z['hm'].sigmoid_(), min=1e-4, max=1-1e-4)
+            if head.lower() == 'hm':
+                head_output = torch.clamp(
+                    self.__getattr__(head.lower())(y[-1]).sigmoid_(),
+                    min=1e-4,
+                    max=1-1e-4
+                )
+                z[head.lower()] = head_output
+            else:
+                z[head.lower()] = self.__getattr__(head.lower())(y[-1])
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
