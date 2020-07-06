@@ -12,6 +12,7 @@ from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
 
 from predictor import VisualizationDemo
+from pathlib import Path
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -83,7 +84,13 @@ if __name__ == "__main__":
         if len(args.input) == 1:
             args.input = glob.glob(os.path.expanduser(args.input[0]))
             assert args.input, "The input path(s) was not found"
-        for path in tqdm.tqdm(args.input, disable=not args.output):
+        input_path_list = [Path(x) for x in args.input]
+        input_images_list = []
+        for input_path in input_path_list:
+            if input_path.is_file(): input_images_list.append(str(input_path))
+            if input_path.is_dir():
+                input_images_list.extend([str(x) for x in input_path.glob('*.jpg')])
+        for path in tqdm.tqdm(input_images_list, disable=not args.output):
             # use PIL, to be consistent with evaluation
             img = read_image(path, format="BGR")
             start_time = time.time()
