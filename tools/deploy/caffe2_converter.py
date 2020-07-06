@@ -61,6 +61,7 @@ if __name__ == "__main__":
     parser.add_argument("--calibration-batch", type=int, default=512, help="max calibration batch number")
     parser.add_argument("--calibration-cache", help="output calibration cache path")
     parser.add_argument("--quantization", help="input quantization layers definition")
+    parser.add_argument("--exclude", help="input exclude quantization layers definition")
     parser.add_argument("--output", help="output directory for the converted model")
     parser.add_argument("--onnx", help="output onnx model path")
     parser.add_argument(
@@ -140,12 +141,22 @@ if __name__ == "__main__":
                     logger.info("quantization_layers: {}".format(quantization_layers))
                 else:
                     quantization_layers = None
+                if args.exclude:
+                    assert not args.quantization, "exclude and quantization cannot be set simultaneously."
+                    exclude_layers = []
+                    with open(args.exclude) as f:
+                        for line in f:
+                            exclude_layers.append(line.strip())
+                    logger.info("exclude_layers: {}".format(exclude_layers))
+                else:
+                    exclude_layers = None
             else:
                 int8_calibrator = None
                 quantization_layers = None
+                exclude_layers = None
             TensorRTModel.build_engine(onnx_f, engine_f, cfg.TEST.BATCH_SIZE, device=cfg.MODEL.DEVICE.upper(),
                                        fp16_mode=args.fp16, int8_mode=args.int8, int8_calibrator=int8_calibrator,
-                                       quantization_layers=quantization_layers)
+                                       quantization_layers=quantization_layers, exclude_layers=exclude_layers)
             # release data iter
             if int8_calibrator is not None:
                 del int8_calibrator

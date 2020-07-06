@@ -148,12 +148,21 @@ class TensorRTBackendRep(BackendRep):
                 if layer.name in quantization_layers:
                     for i in range(layer.num_inputs):
                         tensor = layer.get_input(i)
-                        value = table[tensor.name]
-                        tensor.dynamic_range = (-value, value)
+                        if tensor.name in table:
+                            value = table[tensor.name]
+                            tensor.dynamic_range = (-value, value)
                     for i in range(layer.num_outputs):
                         tensor = layer.get_output(i)
-                        value = table[tensor.name]
-                        tensor.dynamic_range = (-value, value)
+                        if tensor.name in table:
+                            value = table[tensor.name]
+                            tensor.dynamic_range = (-value, value)
+
+        if self.builder.int8_mode and kwargs["exclude_layers"] is not None:
+            exclude_layers = kwargs["exclude_layers"]
+            for layer in self.network:
+                if layer.name in exclude_layers:
+                    layer.precision = trt.float16 if self.builder.fp16_mode else trt.float32
+                    logger.info("Set layer precision {}: {}".format(layer.name, layer.precision))
 
         if self.builder.int8_mode and kwargs["quantization_layers"] is None:
             int8_calibrator = kwargs["int8_calibrator"]
