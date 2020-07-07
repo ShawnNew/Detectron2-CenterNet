@@ -212,9 +212,61 @@ def register_all_pascal_voc(root):
         MetadataCatalog.get(name).evaluator_type = "pascal_voc"
 
 
+# == Predefined splits for LISA COCO ===
+_PREDEFINED_SPLITS_LISA_COCO = {}
+_PREDEFINED_SPLITS_LISA_COCO['lisa_box_coco'] = {
+    "lisa_box_coco_train": ("lisa", "lisa/Annotations/coco/annotations/box_instances_train2017.json"),
+    "lisa_box_coco_val": ("lisa", "lisa/Annotations/coco/annotations/box_instances_val2017.json"),
+    "lisa_day_box_coco_train": ("lisa", "lisa/Annotations/coco/annotations/day_box_instances_train2017.json"),
+    "lisa_day_box_coco_val": ("lisa", "lisa/Annotations/coco/annotations/day_box_instances_val2017.json"),
+    "lisa_night_box_coco_train": ("lisa", "lisa/Annotations/coco/annotations/night_box_instances_train2017.json"),
+    "lisa_night_box_coco_val": ("lisa", "lisa/Annotations/coco/annotations/night_box_instances_val2017.json")
+}
+_PREDEFINED_SPLITS_LISA_COCO['lisa_bulb_coco'] = {
+    "lisa_bulb_coco_train": ("lisa", "lisa/Annotations/coco/annotations/bulb_instances_train2017.json"),
+    "lisa_bulb_coco_val": ("lisa", "lisa/Annotations/coco/annotations/bulb_instances_val2017.json"),
+    "lisa_day_bulb_coco_train": ("lisa", "lisa/Annotations/coco/annotations/day_bulb_instances_train2017.json"),
+    "lisa_day_bulb_coco_val": ("lisa", "lisa/Annotations/coco/annotations/day_bulb_instances_val2017.json"),
+    "lisa_night_bulb_coco_train": ("lisa", "lisa/Annotations/coco/annotations/night_bulb_instances_train2017.json"),
+    "lisa_night_bulb_coco_val": ("lisa", "lisa/Annotations/coco/annotations/night_bulb_instances_val2017.json")
+}
+def register_all_lisa_coco(root):
+    for dataset_name, splits_per_dataset in _PREDEFINED_SPLITS_LISA_COCO.items():
+        for key, (image_root, json_file) in splits_per_dataset.items():
+            # Assume pre-defined datasets live in `./datasets`.
+            register_coco_instances(
+                key,
+                # _get_builtin_metadata(dataset_name),
+                {},
+                os.path.join(root, json_file) if "://" not in json_file else json_file,
+                os.path.join(root, image_root),
+            )
+
+# == Predefined bulb-wise traffic light ===
+_PREDEFINED_BULB_TRAFFIC_LIGHT = {}
+_PREDEFINED_BULB_TRAFFIC_LIGHT["bulb_wise_tl"] = {
+    "bulb_wise_tl_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020.json"),
+    "bulb_wise_tl_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val2020.json"),
+    "tl_bulb": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/tl_bulb.json")
+}
+
+def register_all_bulb_tl(root):
+    for dataset_name, splits_per_dataset in _PREDEFINED_BULB_TRAFFIC_LIGHT.items():
+        for key, (image_root, json_file) in splits_per_dataset.items():
+            # Assume pre-defined datasets live in `./datasets`.
+            register_coco_instances(
+                key,
+                # _get_builtin_metadata(dataset_name),
+                {},
+                os.path.join(root, json_file) if "://" not in json_file else json_file,
+                os.path.join(root, image_root),
+            )
+
 # Register them all under "./datasets"
 _root = os.getenv("DETECTRON2_DATASETS", "datasets")
 register_all_coco(_root)
 register_all_lvis(_root)
 register_all_cityscapes(_root)
 register_all_pascal_voc(_root)
+register_all_lisa_coco(_root)
+register_all_bulb_tl(_root)
