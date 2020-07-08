@@ -90,7 +90,7 @@ class TensorRTBackendRep(BackendRep):
         self._set_device(device)
         self._logger = TRT_LOGGER
         self.builder = trt.Builder(self._logger)
-        self.network = self.builder.create_network(flags=1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+        self.network = self.builder.create_network(flags=1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
         self.parser = trt.OnnxParser(self.network, self._logger)
 
         if not isinstance(model, six.string_types):
@@ -121,8 +121,12 @@ class TensorRTBackendRep(BackendRep):
         if "int8_mode" in kwargs:
             self.builder.int8_mode = kwargs["int8_mode"]
             assert not kwargs["int8_mode"] or self.builder.platform_has_fast_int8
-            if self.builder.int8_mode and kwargs["quantization_layers"] is None:
-                self.builder.int8_calibrator = kwargs["int8_calibrator"]
+            # perform calibration only when no quantization_layers nor exclude_layers are provided
+            if self.builder.int8_mode and kwargs["quantization_layers"] is None \
+                    and kwargs["exclude_layers"] is None:
+                int8_calibrator = kwargs["int8_calibrator"]
+                int8_calibrator.check_input_validity(self.network)
+                self.builder.int8_calibrator = int8_calibrator
 
         logger.info("NetworkDefinition:")
         for layer in self.network:
@@ -158,15 +162,30 @@ class TensorRTBackendRep(BackendRep):
                             tensor.dynamic_range = (-value, value)
 
         if self.builder.int8_mode and kwargs["exclude_layers"] is not None:
+            exclude_tensors = set()
             exclude_layers = kwargs["exclude_layers"]
+            table = decode_calibration_cache(kwargs["int8_calibrator"].cache_file)
+
+            # add inputs to excluded tensors
             for layer in self.network:
                 if layer.name in exclude_layers:
-                    layer.precision = trt.float16 if self.builder.fp16_mode else trt.float32
-                    logger.info("Set layer precision {}: {}".format(layer.name, layer.precision))
+                    for i in range(layer.num_inputs):
+                        tensor = layer.get_input(i)
+                        exclude_tensors.add(tensor.name)
 
-        if self.builder.int8_mode and kwargs["quantization_layers"] is None:
-            int8_calibrator = kwargs["int8_calibrator"]
-            int8_calibrator.check_input_validity(self.network)
+            # fill all non-excluded tensors
+            for layer in self.network:
+                for i in range(layer.num_inputs):
+                    tensor = layer.get_input(i)
+                    if tensor.name in table and tensor.name not in exclude_tensors:
+                        value = table[tensor.name]
+                        tensor.dynamic_range = (-value, value)
+                for i in range(layer.num_outputs):
+                    tensor = layer.get_output(i)
+                    if tensor.name in table and tensor.name not in exclude_tensors:
+                        value = table[tensor.name]
+                        tensor.dynamic_range = (-value, value)
+
         trt_engine = self.builder.build_cuda_engine(self.network)
         if trt_engine is None:
             raise RuntimeError("Failed to build TensorRT engine from network")
