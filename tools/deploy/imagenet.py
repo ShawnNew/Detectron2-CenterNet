@@ -229,8 +229,10 @@ def main():
 
     if args.output:
         os.makedirs(args.output, exist_ok=True)
+    suffix = "_fp16" if args.fp16 else ""
+    suffix += "_int8" if args.int8 else ""
     onnx_f = os.path.join(args.output, "model.onnx")
-    engine_f = os.path.join(args.output, "model.trt")
+    engine_f = os.path.join(args.output, "model{}.trt".format(suffix))
     cache_f = os.path.join(args.output, "cache.txt")
 
     # get data loader
