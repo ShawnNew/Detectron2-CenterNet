@@ -7,7 +7,7 @@ DATASETS:
   TEST: ("bulb_wise_tl_train",)
 SOLVER:
   IMS_PER_BATCH: 8
-  BASE_LR: 2.5e-4  # Note that RetinaNet uses a different default learning rate
+  BASE_LR: 2.5e-4
   STEPS: (79500, 106000)
   MAX_ITER: 132500
   CHECKPOINT_PERIOD: 5300

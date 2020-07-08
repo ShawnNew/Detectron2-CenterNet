@@ -243,8 +243,8 @@ def register_all_lisa_coco(root):
             )
 
 # == Predefined bulb-wise traffic light ===
-_PREDEFINED_BULB_TRAFFIC_LIGHT = {}
-_PREDEFINED_BULB_TRAFFIC_LIGHT["bulb_wise_tl"] = {
+_PREDEFINED_TRAFFIC_LIGHT = {}
+_PREDEFINED_TRAFFIC_LIGHT["bulb_wise_tl"] = {
     "bulb_wise_tl_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_bulb.json"),
     # "bulb_wise_tl_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val2020.json"),
     "tl_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_tl_bulb.json"),
@@ -252,7 +252,7 @@ _PREDEFINED_BULB_TRAFFIC_LIGHT["bulb_wise_tl"] = {
 }
 
 def register_all_bulb_tl(root):
-    for dataset_name, splits_per_dataset in _PREDEFINED_BULB_TRAFFIC_LIGHT.items():
+    for dataset_name, splits_per_dataset in _PREDEFINED_TRAFFIC_LIGHT.items():
         for key, (image_root, json_file) in splits_per_dataset.items():
             # Assume pre-defined datasets live in `./datasets`.
             register_coco_instances(
