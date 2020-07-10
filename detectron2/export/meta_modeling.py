@@ -1,12 +1,13 @@
 import contextlib
+import functools
 import logging
 import time
 
 import onnx
 import torch
-
 from detectron2.modeling import meta_arch
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
+from detectron2.modeling.postprocessing import detector_postprocess
 from detectron2.structures import Boxes, Instances, RotatedBoxes
 
 from .patcher import ROIHeadsPatcher, patch_generalized_rcnn
@@ -233,6 +234,78 @@ class GeneralizedRCNNModel(MetaModel):
             return ["pred_boxes", "scores", "pred_classes", "batch_splits"]
 
 
+class ProposalModel(MetaModel):
+
+    def __init__(self, cfg, torch_model, trace_mode=False):
+        assert isinstance(torch_model, meta_arch.ProposalNetwork)
+        torch_model = patch_generalized_rcnn(torch_model)
+        torch_model.proposal_generator.tensor_mode = True
+        super(ProposalModel, self).__init__(cfg, torch_model, trace_mode)
+
+        self.preprocess_image = functools.partial(meta_arch.GeneralizedRCNN.preprocess_image, self._wrapped_model)
+
+    def convert_inputs(self, batched_inputs):
+        assert isinstance(self._wrapped_model, meta_arch.ProposalNetwork)
+        images = self.preprocess_image(batched_inputs)
+
+        # compute scales and im_info
+        assert not self._wrapped_model.training
+        min_size = self._wrapped_model.input.MIN_SIZE_TEST
+        max_size = self._wrapped_model.input.MAX_SIZE_TEST
+        min_size = min_size[0] if isinstance(min_size, tuple) else min_size
+        scales = []
+        for i in range(len(batched_inputs)):
+            s = max(batched_inputs[i]["height"] * 1.0 / min_size,
+                    batched_inputs[i]["width"] * 1.0 / max_size)
+            scales.append((s,))
+        im_info = []
+        for image_size, scale in zip(images.image_sizes, scales):
+            im_info.append([*image_size, *scale])
+        return {
+            "images": images.tensor,
+            "image_sizes": torch.tensor(images.image_sizes),
+            "im_info": torch.tensor(im_info, device=images.tensor.device),
+        }
+
+    def convert_outputs(self, batched_inputs, inputs, results):
+        image_sizes = inputs["image_sizes"]
+        m_results = [Instances(image_size) for image_size in image_sizes]
+
+        proposal_boxes = results["proposal_boxes"]
+        for i in range(len(batched_inputs)):
+            indices = (proposal_boxes[:, 0] == i).nonzero(as_tuple=True)
+            proposals = proposal_boxes[indices][:, 1:]
+            m_results[i].proposal_boxes = Boxes(proposals)
+            m_results[i].objectness_logits = torch.linspace(10, -10, steps=proposals.size(0), device=proposals.device)
+
+        # postprocess
+        processed_results = []
+        for results_per_image, input_per_image, image_size in zip(m_results, batched_inputs, image_sizes):
+            height = input_per_image.get("height", image_size[0])
+            width = input_per_image.get("width", image_size[1])
+            r = detector_postprocess(results_per_image, height, width)
+            processed_results.append({"proposals": r})
+        return processed_results
+
+    def inference(self, inputs):
+        images = inputs["images"]
+        features = self._wrapped_model.backbone(images)
+        proposals, _ = self._wrapped_model.proposal_generator(inputs, features, gt_instances=None)
+        flatten = proposals[0].flatten()
+
+        results = {}
+        for i, output_name in enumerate(proposals[0].batch_extra_fields.keys()):
+            if output_name in self.get_output_names():
+                results[output_name] = flatten[i]
+        return results
+
+    def get_input_names(self):
+        return ["images", "image_sizes", "im_info"]
+
+    def get_output_names(self):
+        return ["proposal_boxes"]
+
+
 class Timer:
     def __enter__(self):
         self.time = time.perf_counter()
@@ -332,4 +405,5 @@ def remove_copy_between_cpu_and_gpu(onnx_model):
 META_ARCH_ONNX_EXPORT_TYPE_MAP = {
     "GeneralizedRCNN": GeneralizedRCNNModel,
     "RetinaNet": RetinaNetModel,
+    "ProposalNetwork": ProposalModel,
 }

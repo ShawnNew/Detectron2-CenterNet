@@ -224,6 +224,10 @@ class ProposalNetwork(nn.Module):
         self.register_buffer("pixel_mean", torch.Tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1))
         self.register_buffer("pixel_std", torch.Tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1))
 
+        # Dynamic parameters
+        self.input = cfg.INPUT
+        self.dynamic = cfg.INPUT.DYNAMIC
+
     @property
     def device(self):
         return self.pixel_mean.device
