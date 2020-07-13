@@ -1,5 +1,7 @@
 MODEL:
   META_ARCHITECTURE: "CenterNet"
+  BACKBONE:
+    NAME: "build_dla34_backbone"
   PIXEL_MEAN: [0.408, 0.447, 0.470]
   PIXEL_STD: [0.289, 0.274, 0.278]
 DATASETS:
@@ -13,5 +15,5 @@ SOLVER:
   CHECKPOINT_PERIOD: 5300
 #TEST:
 #  EVAL_PERIOD: 1
-OUTPUT_DIR: "./output/centernet-bulb-finetune-0706-debug"
+OUTPUT_DIR: "./output/centernet-tl"
 VERSION: 2
