@@ -20,7 +20,8 @@ __all__ = [
     "DLA",
     "IDAUp",
     "DLAUp",
-    "dla34"
+    "DLA34",
+    "build_dla34_backbone",
 ]
 
 BN_MOMENTUM = 0.1
@@ -278,26 +279,23 @@ class DLA(Backbone):
         self.load_state_dict(model_weights)
 
 
-def dla34(pretrained=True, **kwargs):  # DLA-34
-    model = DLA([1, 1, 1, 2, 2, 1],
-                [16, 32, 64, 128, 256, 512],
-                block=DLABasicBlock, **kwargs)
-    if pretrained:
-        model.load_pretrained_model(data='imagenet', name='dla34', hash='ba72cf86')
-    return model
 
 class DLA34(Backbone):
-    def __init__(self, cfg):
+    def __init__(self, cfg, pretrained=True):
         super().__init__()
-        self.down_ratio = cfg.MODEL.CENTERNET.DOWN_RATIO
+        self.down_ratio  = cfg.MODEL.CENTERNET.DOWN_RATIO
         self.num_classes = cfg.MODEL.CENTERNET.NUM_CLASSES
-        self.last_level = cfg.MODEL.CENTERNET.LAST_LEVEL
+        self.last_level  = cfg.MODEL.CENTERNET.LAST_LEVEL
+        self.levels      = cfg.MODEL.CENTERNET.LEVELS
+        self.channels    = cfg.MODEL.CENTERNET.CHANNELS
+        self.size_div    = cfg.MODEL.CENTERNET.SIZE_DIVISIBILITY
         assert self.down_ratio in [2, 4, 8, 16]
         self.first_level = int(np.log2(self.down_ratio))
-
-        self.base = dla34(pretrained=True)
-        self.channels = self.base.channels
         out_channel = self.channels[self.first_level]
+
+        self.base = DLA(self.levels, self.channels, block=DLABasicBlock)
+        if pretrained:
+            self.base.load_pretrained_model(data='imagenet', name='dla34', hash='ba72cf86')
         scales = [2 ** i for i in range(len(self.channels[self.first_level:]))]
         self.dla_up = DLAUp(self.first_level, self.channels[self.first_level:], scales)
         self.ida_up = IDAUp(out_channel, self.channels[self.first_level:self.last_level],
@@ -305,7 +303,7 @@ class DLA34(Backbone):
 
     @property
     def size_divisibility(self):
-        return 32
+        return self.size_div
 
     def forward(self, x):
         x = self.base(x)

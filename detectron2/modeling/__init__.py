@@ -11,7 +11,7 @@ from .backbone import (
     build_backbone,
     build_resnet_backbone,
     make_stage,
-    dla34
+    build_dla34_backbone
 )
 from .meta_arch import (
     META_ARCH_REGISTRY,
