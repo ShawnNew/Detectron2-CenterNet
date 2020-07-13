@@ -6,11 +6,14 @@ from torch import nn
 from os.path import join
 import torch.utils.model_zoo as model_zoo
 import math
+from .build import BACKBONE_REGISTRY
+from .backbone import Backbone
 
 
 from detectron2.layers import (
     CNNBlockBase,
     DeformConvV2,
+    ShapeSpec,
 )
 
 __all__ = [
@@ -199,7 +202,7 @@ class DLAUp(nn.Module):
         return out
 
 
-class DLA(nn.Module):
+class DLA(Backbone):
     def __init__(self, levels, channels, num_classes=1000,
                  block=DLABasicBlock, residual_root=False, linear_root=False):
         super(DLA, self).__init__()
@@ -282,5 +285,41 @@ def dla34(pretrained=True, **kwargs):  # DLA-34
     if pretrained:
         model.load_pretrained_model(data='imagenet', name='dla34', hash='ba72cf86')
     return model
+
+class DLA34(Backbone):
+    def __init__(self, cfg):
+        super().__init__()
+        self.down_ratio = cfg.MODEL.CENTERNET.DOWN_RATIO
+        self.num_classes = cfg.MODEL.CENTERNET.NUM_CLASSES
+        self.last_level = cfg.MODEL.CENTERNET.LAST_LEVEL
+        assert self.down_ratio in [2, 4, 8, 16]
+        self.first_level = int(np.log2(self.down_ratio))
+
+        self.base = dla34(pretrained=True)
+        self.channels = self.base.channels
+        out_channel = self.channels[self.first_level]
+        scales = [2 ** i for i in range(len(self.channels[self.first_level:]))]
+        self.dla_up = DLAUp(self.first_level, self.channels[self.first_level:], scales)
+        self.ida_up = IDAUp(out_channel, self.channels[self.first_level:self.last_level],
+                            [2 ** i for i in range(self.last_level - self.first_level)])
+
+    @property
+    def size_divisibility(self):
+        return 32
+
+    def forward(self, x):
+        x = self.base(x)
+        x = self.dla_up(x)
+        y = []
+        for i in range(self.last_level - self.first_level):
+            y.append(x[i].clone())
+        self.ida_up(y, 0, len(y))
+        return y
+
+
+@BACKBONE_REGISTRY.register()
+def build_dla34_backbone(cfg, input_shape: ShapeSpec):
+    backbone = DLA34(cfg)
+    return backbone
 
 

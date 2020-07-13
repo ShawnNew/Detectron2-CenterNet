@@ -6,7 +6,7 @@ from torch.nn import functional as F
 
 from detectron2.structures import Boxes, ImageList, Instances
 from ..postprocessing import detector_postprocess
-from ..backbone import dla34, DLAUp, IDAUp
+from ..backbone import DLAUp, IDAUp, build_backbone
 from .build import META_ARCH_REGISTRY
 from detectron2.data.catalog import MetadataCatalog, DatasetCatalog
 from detectron2.data.detection_utils import gen_heatmap
@@ -32,9 +32,6 @@ class CenterNet(nn.Module):
         # backbone - DLA
         head_conv                     = cfg.MODEL.CENTERNET.HEAD_CONV
         final_kernel                  = cfg.MODEL.CENTERNET.FINAL_KERNEL
-        self.down_ratio               = cfg.MODEL.CENTERNET.DOWN_RATIO
-        self.num_classes              = cfg.MODEL.CENTERNET.NUM_CLASSES
-        self.last_level               = cfg.MODEL.CENTERNET.LAST_LEVEL
         # heads
         self.heads                    = cfg.MODEL.CENTERNET.TASK
         # loss
@@ -55,23 +52,15 @@ class CenterNet(nn.Module):
         self.heads["HM"] = self.num_classes
         self.register_buffer("pixel_mean", torch.Tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1))
         self.register_buffer("pixel_std", torch.Tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1))
-        assert self.down_ratio in [2, 4, 8, 16]
-        self.first_level = int(np.log2(self.down_ratio))
 
         # self modules
-        self.base = dla34(pretrained=True)
-        channels = self.base.channels
-        out_channel = channels[self.first_level]
-        scales = [2 ** i for i in range(len(channels[self.first_level:]))]
-        self.dla_up = DLAUp(self.first_level, channels[self.first_level:], scales)
-        self.ida_up = IDAUp(out_channel, channels[self.first_level:self.last_level],
-                            [2 ** i for i in range(self.last_level - self.first_level)])
+        self.backbone = build_backbone(cfg)
 
         for head in self.heads:
             classes = self.heads[head]
             if head_conv > 0:
                 fc = nn.Sequential(
-                    nn.Conv2d(channels[self.first_level], head_conv,
+                    nn.Conv2d(self.backbone.channels[self.backbone.first_level], head_conv,
                               kernel_size=3, padding=1, bias=True),
                     nn.ReLU(inplace=True),
                     nn.Conv2d(head_conv, classes,
@@ -82,7 +71,7 @@ class CenterNet(nn.Module):
                 else:
                     fill_fc_weights(fc)
             else:
-                fc = nn.Conv2d(channels[self.first_level], classes,
+                fc = nn.Conv2d(self.backbone.channels[self.backbone.first_level], classes,
                                kernel_size=final_kernel, stride=1,
                                padding=final_kernel // 2, bias=True)
                 if 'hm' in head:
@@ -97,13 +86,7 @@ class CenterNet(nn.Module):
 
     def forward(self, batched_inputs):
         images, instances = self.preprocess_image(batched_inputs)
-        x = self.base(images.tensor)
-        x = self.dla_up(x)
-
-        y = []
-        for i in range(self.last_level - self.first_level):
-            y.append(x[i].clone())
-        self.ida_up(y, 0, len(y))
+        y = self.backbone(images.tensor)
 
         z = {}
         for head in self.heads:
@@ -144,9 +127,9 @@ class CenterNet(nn.Module):
         else: instances = []
 
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
-        images = ImageList.from_tensors(images, 32)
+        images = ImageList.from_tensors(images, self.backbone.size_divisibility)
         input_shape = np.array(images.tensor.shape[2:])
-        output_shape = input_shape // self.down_ratio
+        output_shape = input_shape // self.backbone.down_ratio
         if not self.training: return images, []
         instances = [gen_heatmap(x, output_shape, self.meta) for x in instances]
         return images, instances
