@@ -38,6 +38,7 @@ class CenterNet(nn.Module):
         self.hm_weight                = cfg.MODEL.CENTERNET.HM_WEIGHT
         self.wh_weight                = cfg.MODEL.CENTERNET.WH_WEIGHT
         self.off_weight               = cfg.MODEL.CENTERNET.OFF_WEIGHT
+        self.focal_loss_alpha         = cfg.MODEL.CENTERNET.FOCAL_LOSS_ALPHA
         # inference
         self.score_threshold          = cfg.MODEL.CENTERNET.SCORE_THRESH_TEST
         self.topk_candidates          = cfg.MODEL.CENTERNET.TOPK_CANDIDATES_TEST
@@ -136,7 +137,7 @@ class CenterNet(nn.Module):
 
     def losses(self, outputs, instances):
         # loss function for heatmap and wh+reg.
-        _crit = FocalLoss()
+        _crit = FocalLoss(self.focal_loss_alpha)
         reg_crit = RegL1Loss()
 
         # get ground truth from batched_inputs
@@ -190,7 +191,7 @@ class CenterNet(nn.Module):
         boxes_all, scores_all, class_idxs_all = ctdet_decode(output['hm'],
                                                              output['wh'],
                                                              reg=output['reg'],
-                                                             down_ratio=self.down_ratio,
+                                                             down_ratio=self.backbone.down_ratio,
                                                              K=self.topk_candidates)
 
         # take max number of detections per image
@@ -214,20 +215,31 @@ class CenterNet(nn.Module):
 
 class FocalLoss(nn.Module):
   '''nn.Module warpper for focal loss'''
-  def __init__(self):
+  def __init__(self, alpha):
     super(FocalLoss, self).__init__()
     self.neg_loss = _neg_loss
+    self.alpha = alpha
 
   def forward(self, out, target):
-    return self.neg_loss(out, target)
+    return self.neg_loss(out, target, self.alpha)
 
-def _neg_loss(pred, gt):
+def _neg_loss(pred, gt, alpha=None):
     ''' Modified focal loss. Exactly the same as CornerNet.
         Runs faster and costs a little bit more memory
       Arguments:
         pred (batch x c x h x w)
         gt_regr (batch x c x h x w)
     '''
+    num_batches, num_classes = pred.shape[0], pred.shape[1]
+    if alpha is None:
+        alpha = torch.tensor([1] * num_classes).cuda()
+    else:
+        if not isinstance(alpha, list):
+            alpha = torch.tensor([alpha] * num_classes).cuda()
+        else:
+            if len(alpha) == 1: alpha = alpha * num_classes
+            elif len(alpha) != num_classes: alpha.extend([1]*(num_classes-len(alpha)))
+            alpha = torch.tensor(alpha).cuda()
     pos_inds = gt.eq(1).float()
     neg_inds = gt.lt(1).float()
 
@@ -239,6 +251,8 @@ def _neg_loss(pred, gt):
     neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
 
     num_pos = pos_inds.float().sum()
+    pos_loss = alpha[:, None, None] * pos_loss.sum(0)
+    neg_loss = alpha[:, None, None] * neg_loss.sum(0)
     pos_loss = pos_loss.sum()
     neg_loss = neg_loss.sum()
 
