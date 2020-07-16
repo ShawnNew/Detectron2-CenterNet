@@ -1,12 +1,15 @@
-_BASE_: "../Base-CenterNet.yaml"
+_BASE_: "./Base-CenterNet.yaml"
 MODEL:
   CENTERNET:
     FOCAL_LOSS_ALPHA: [0.1, 0.2, 0.33, 0.33, 0.2, 0.2, 0.1, 0.23, 0.22, 0.28, 0.29]
 DATASETS:
   TRAIN: ("bulb_wise_tl_train",)
   TEST: ("bulb_wise_tl_train",)
+INPUT:
+  FORMAT: "RGB"
+  MIN_SIZE_TRAIN: (640, 672, 704, 736, 768, 800)
 SOLVER:
-  IMS_PER_BATCH: 8
+  IMS_PER_BATCH: 2
   BASE_LR: 2.5e-4
   STEPS: (79500, 106000)
   MAX_ITER: 132500
