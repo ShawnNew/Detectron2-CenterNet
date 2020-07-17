@@ -31,3 +31,10 @@ def register_scale():
     _register_coco_instances("coco_2017_train_9",
                              "coco_cleanup/annotations/coco_instances_2017_cleanup_autox_10_classes.json",
                              "coco_cleanup/images/train2017")
+
+    # combined dataset
+    _register_coco_instances("combined_scale_coco_train_9",
+                             "annotations/d_train_2020_10_classes_+_d_train_2020_10_classes_+_"
+                             "coco_instances_2017_cleanup_autox_10_classes.json", "")
+    _register_coco_instances("combined_scale_coco_val_9",
+                             "annotations/d_val_2020_10_classes_+_d_val_2020_10_classes.json", "")

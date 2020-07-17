@@ -6,7 +6,7 @@ set -x
   "${data:=/autox/users/dongqixu/ILSVRC2012/val}" \
   "${network:=resnet50}" \
   "${batch_size:=64}" \
-  "${calibration_batch:=128}" \
+  "${calibration_batch:=128}"
 
 output="$(pwd)/output/${network}_batch_${batch_size}"
 

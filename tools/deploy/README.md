@@ -66,6 +66,26 @@ cd tools/deploy
     MODEL.WEIGHTS /autox/users/dongqixu/envs/model_zoo/mask_rcnn_R_50_FPN_1x.pkl INPUT.DYNAMIC False TEST.BATCH_SIZE 4
 ```
 
+**rpn_R_50_FPN_1x**
+
+ResizeShortestEdge, 45.720, 57.995
+ResizeShortestEdge, BATCH_SIZE 4, 45.714, 58.031
+ResizeLetterBox, 45.863, 57.892
+Traceable, 45.874, 57.902
+Traceable, BATCH_SIZE 4, 45.874, 57.902
+
+```shell script
+# rpn_R_50_FPN_1x
+./tools/train_net.py --num-gpus 1 \
+  --config-file configs/COCO-Detection/rpn_R_50_FPN_1x.yaml \
+  --eval-only MODEL.WEIGHTS /autox-sz/users/dongqixu/share/model_zoo/detectron2/coco-detection/rpn_R_50_FPN_1x.pkl TEST.BATCH_SIZE 4
+
+# possible format options: onnx and tensorrt
+./caffe2_converter.py --format onnx --output ./rpn --run-eval \
+    --config-file ../../configs/COCO-Detection/rpn_R_50_FPN_1x.yaml \
+    MODEL.WEIGHTS /autox-sz/users/dongqixu/share/model_zoo/detectron2/coco-detection/rpn_R_50_FPN_1x.pkl INPUT.DYNAMIC False TEST.BATCH_SIZE 4
+```
+
 **panoptic_fpn_R_50_1x**
 
 |    Format    | Batch size | Inf time (s) | mIoU    | box AP  | mask AP | PQ      | Engine time (ms) |
@@ -83,9 +103,16 @@ cd tools/deploy
 
 |    Format    | Batch size | Inf time (s) | Top1   | Top5   | Engine time (ms) |
 | :----------: | :--------: | :----------: | :----: | :----: | :--------------: |
-| torchvision  | 64         | 0.1189       | 76.130 | 92.862 | -                |
-| TensorRT     | 64         | 0.1203       | 76.130 | 92.862 | 40.5073          |
-| INT8         | 64         | 0.1175       | 76.098 | 92.942 | 6.2309           |
+| torchvision  | 64         | 0.1191       | 76.130 | 92.862 | -                |
+| TensorRT     | 64         | 0.1179       | 76.130 | 92.862 | 40.4424          |
+| FP16         | 64         | 0.1166       | 76.106 | 92.866 | 12.0521          |
+| INT8         | 64         | 0.1173       | 76.084 | 92.918 | 6.2329           |
+| FP16 + INT8  | 64         | 0.1195       | 76.080 | 92.916 | 6.2211           |
 | torchvision  | 1024       | 1.9038       | 76.130 | 92.862 | -                |
 | TensorRT     | 1024       | 1.9130       | 76.130 | 92.862 | 613.5728         |
 | INT8         | 1024       | 1.9263       | 76.038 | 92.864 | 74.9226          |
+
+```shell script
+python imagenet.py /autox-sz/users/dongqixu/dataset/ILSVRC2012/val --output ./resnet50 --batch-size 64 \
+    --debug --format tensorrt
+```
