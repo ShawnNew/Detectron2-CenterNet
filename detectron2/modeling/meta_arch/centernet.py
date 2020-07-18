@@ -252,7 +252,6 @@ def _neg_loss(pred, gt, alpha=None):
 
     num_pos = pos_inds.float().sum()
     pos_loss = alpha[:, None, None] * pos_loss.sum(0)
-    neg_loss = alpha[:, None, None] * neg_loss.sum(0)
     pos_loss = pos_loss.sum()
     neg_loss = neg_loss.sum()
 
@@ -321,6 +320,7 @@ def ctdet_decode(heat, wh, reg=None, down_ratio=1, cat_spec_wh=False, K=100):
     batch, cat, height, width = heat.size()
 
     # perform nms on heatmaps
+    #TODO: modify max pool in order to solve center collision.
     heat = _nms(heat)
 
     scores, inds, clses, ys, xs = _topk(heat, K=K)

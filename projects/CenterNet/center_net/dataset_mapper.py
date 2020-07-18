@@ -33,9 +33,9 @@ def bulb_traffic_light_augmentation(cfg, is_train):
     augmentation.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
     if is_train:
         train_augmentation = [
-            T.RandomFlip(),
-            T.RandomApply(T.RandomFlip(prob=0.5, horizontal=False, vertical=True), prob=0.3),
-            T.RandomApply(T.RandomRotation(angle=[-90, 90]), prob=0.15),
+            # T.RandomFlip(),
+            # T.RandomApply(T.RandomFlip(prob=0.5, horizontal=False, vertical=True), prob=0.3),
+            T.RandomApply(T.RandomRotation(angle=[-15, 15]), prob=0.15),
             T.RandomApply(T.RandomContrast(intensity_min=0.8, intensity_max=1.5), prob=0.15),
             T.RandomApply(T.RandomBrightness(intensity_min=0.8, intensity_max=2), prob=0.15),
             T.RandomApply(T.RandomSaturation(intensity_min=0.5, intensity_max=2), prob=0.15),
