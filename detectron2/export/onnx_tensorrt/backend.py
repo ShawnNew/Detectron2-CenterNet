@@ -74,7 +74,7 @@ def decode_calibration_cache(cache_f):
 _config = Config()
 
 if _config.USE_PYBIND:
-    TRT_LOGGER = trt.Logger(trt.Logger.VERBOSE)
+    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
 if not _config.USE_PYBIND:
     # from . import parser
