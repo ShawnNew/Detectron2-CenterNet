@@ -245,7 +245,9 @@ def register_all_lisa_coco(root):
 # == Predefined bulb-wise traffic light ===
 _PREDEFINED_TRAFFIC_LIGHT = {}
 _PREDEFINED_TRAFFIC_LIGHT["bulb_wise_tl"] = {
-    "bulb_wise_tl_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_bulb.json"),
+    "sz_sh_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_bulb.json"),
+    "sh_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/sh_train2020_bulb.json"),
+    "sz_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/sz_train2020_bulb.json"),
     # "bulb_wise_tl_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val2020.json"),
     "tl_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_tl_bulb.json"),
     "tl_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_tl.json")
