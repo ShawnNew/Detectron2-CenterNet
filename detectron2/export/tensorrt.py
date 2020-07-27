@@ -14,7 +14,7 @@ from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
 from termcolor import colored
 
-from .meta_modeling import RetinaNetModel
+from .meta_modeling import MetaModel, RetinaNetModel, ProposalModel
 from .onnx_tensorrt import backend, to_cuda
 from .onnx_tensorrt.calibrator import PythonEntropyCalibrator
 from .onnx_tensorrt.tensorrt_engine import Engine
@@ -56,7 +56,13 @@ class TensorRTModel:
         elif isinstance(inputs, list):
             return self._engine.run([to_cuda(v) for v in inputs])
         elif isinstance(inputs, dict):
-            return self._engine.run([to_cuda(v) for k, v in inputs.items()])
+            m_inputs = {}
+            for i, binding in enumerate(self._engine.inputs):
+                name = re.sub("^__", "", binding.name)
+                assert name in inputs, name
+                m_inputs[name] = inputs[name]
+            m_results = self._engine.run([to_cuda(v) for k, v in m_inputs.items()])
+            return {binding.name: m_results[i] for i, binding in enumerate(self._engine.outputs)}
         else:
             raise NotImplementedError
 
@@ -133,28 +139,19 @@ class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):
 
     def convert_inputs(self, batched_inputs):
         images = self._ns.preprocess_image(batched_inputs)
-        inputs = {
+        return {
             "images": images.tensor,
             "image_sizes": torch.tensor(images.image_sizes),
         }
-        m_inputs = {}
-        for i, binding in enumerate(self._engine.inputs):
-            name = re.sub("^__", "", binding.name)
-            assert name in inputs, name
-            m_inputs[name] = inputs[name]
-        return m_inputs
 
     def convert_outputs(self, batched_inputs, inputs, results):
         output_names = self.get_output_names()
         assert len(results) == len(output_names)
 
-        # convert TensorRT output to dict
         m_results = {}
-        for i, binding in enumerate(self._engine.outputs):
-            assert binding.name in output_names, binding.name
-            if binding.name == "image_sizes":
-                continue
-            m_results[binding.name] = results[i].to(self._ns.device)
+        for k, v in results.items():
+            assert k in output_names, k
+            m_results[k] = v.to(self._ns.device)
 
         image_sizes = inputs["image_sizes"]
 
@@ -172,6 +169,61 @@ class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):
         return meta_arch.GeneralizedRCNN._postprocess(results, batched_inputs, image_sizes)
 
 
+class TensorRTProposal(TensorRTModel, ProposalModel):
+
+    def __init__(self, cfg, engine_path):
+        super(TensorRTProposal, self).__init__(engine_path)
+        MetaModel.__init__(self, cfg, self._engine)
+
+        # preprocess parameters
+        ns = types.SimpleNamespace()
+        ns.training = False
+        ns.input = self._cfg.INPUT
+        ns.dynamic = self._cfg.INPUT.DYNAMIC
+        ns.device = torch.device(self._cfg.MODEL.DEVICE)
+        ns.pixel_mean = torch.tensor(self._cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1).to(ns.device)
+        ns.pixel_std = torch.tensor(self._cfg.MODEL.PIXEL_STD).view(-1, 1, 1).to(ns.device)
+        # size_divisibility
+        ns.backbone = types.SimpleNamespace()
+        ns.backbone.size_divisibility = 32
+
+        ns.preprocess_image = functools.partial(meta_arch.GeneralizedRCNN.preprocess_image, ns)
+        self._ns = ns
+
+    def convert_inputs(self, batched_inputs):
+        images = self._ns.preprocess_image(batched_inputs)
+
+        # compute scales and im_info
+        assert not self._ns.training
+        min_size = self._ns.input.MIN_SIZE_TEST
+        max_size = self._ns.input.MAX_SIZE_TEST
+        min_size = min_size[0] if isinstance(min_size, tuple) else min_size
+        scales = []
+        for i in range(len(batched_inputs)):
+            s = max(batched_inputs[i]["height"] * 1.0 / min_size,
+                    batched_inputs[i]["width"] * 1.0 / max_size)
+            scales.append((s,))
+        im_info = []
+        for image_size, scale in zip(images.image_sizes, scales):
+            im_info.append([*image_size, *scale])
+        return {
+            "images": images.tensor,
+            "image_sizes": torch.tensor(images.image_sizes),
+            "im_info": torch.tensor(im_info, device=images.tensor.device),
+        }
+
+    def convert_outputs(self, batched_inputs, inputs, results):
+        output_names = self.get_output_names()
+        assert len(results) == len(output_names)
+
+        m_results = {}
+        for k, v in results.items():
+            assert k in output_names, k
+            m_results[k] = v.to(self._ns.device)
+        return super(TensorRTProposal, self).convert_outputs(batched_inputs, inputs, m_results)
+
+
 META_ARCH_TENSORRT_EXPORT_TYPE_MAP = {
     "RetinaNet": TensorRTRetinaNet,
+    "ProposalNetwork": TensorRTProposal,
 }

@@ -59,7 +59,8 @@ if __name__ == '__main__':
     targets = [(k, v.cuda()) for k, v in targets.items()]
     for i, (name, tensor) in enumerate(targets):
         logger.info(name)
-        diff = outputs[i] - tensor
+        diff = outputs[name] - tensor
         unique = torch.unique(diff)
         logger.info("diff\n{}".format(diff))
         logger.info("unique\n{}".format(unique))
+        logger.info("max\n{}".format(unique.max()))

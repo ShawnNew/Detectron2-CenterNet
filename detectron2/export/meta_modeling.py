@@ -130,7 +130,7 @@ class RetinaNetModel(MetaModel):
         features = [features[f] for f in self._wrapped_model.in_features]
         pred_logits, pred_anchor_deltas = self._wrapped_model.head(features)
 
-        results = {"image_sizes": inputs["image_sizes"]}
+        results = {}
         for i, (box_cls_i, box_delta_i) in enumerate(zip(pred_logits, pred_anchor_deltas)):
             results["box_cls_{}".format(i)] = box_cls_i
             results["box_delta_{}".format(i)] = box_delta_i
@@ -145,7 +145,7 @@ class RetinaNetModel(MetaModel):
         for i in range(num_features):
             output_names.append("box_cls_{}".format(i))
             output_names.append("box_delta_{}".format(i))
-        return ["image_sizes"] + output_names
+        return output_names
 
 
 class GeneralizedRCNNModel(MetaModel):
