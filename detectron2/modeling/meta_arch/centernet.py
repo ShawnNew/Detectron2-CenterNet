@@ -10,11 +10,20 @@ from ..backbone import DLAUp, IDAUp, build_backbone
 from .build import META_ARCH_REGISTRY
 from detectron2.data.catalog import MetadataCatalog, DatasetCatalog
 from detectron2.data.detection_utils import gen_heatmap
+import torch.utils.model_zoo as model_zoo
+
 
 __all__ = [
     "CenterNet",
 ]
 
+model_urls = {
+    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
+    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
+    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
+    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
+    'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
+}
 
 def fill_fc_weights(layers):
     for m in layers.modules():
@@ -32,6 +41,7 @@ class CenterNet(nn.Module):
         # backbone - DLA
         head_conv                     = cfg.MODEL.CENTERNET.HEAD_CONV
         final_kernel                  = cfg.MODEL.CENTERNET.FINAL_KERNEL
+        backbone_type                 = cfg.MODEL.BACKBONE.NAME
         # heads
         self.heads                    = cfg.MODEL.CENTERNET.TASK
         # loss
@@ -55,8 +65,40 @@ class CenterNet(nn.Module):
         self.register_buffer("pixel_std", torch.Tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1))
 
         # self modules
+        self.backbone_type = backbone_type.split('_')[1]
         self.backbone = build_backbone(cfg)
+        if self.backbone_type == 'resnet':
+            self.backbone.down_ratio = 4
+            self.size_divisibility = 16
+            self.deconv_layers = self._make_deconv_layer(
+                self.backbone._out_feature_channels['res4'],
+                2,
+                [256, 256],
+                [4, 4],
+            )
 
+            for head in sorted(self.heads):
+                num_output = self.heads[head]
+                if head_conv > 0:
+                    fc = nn.Sequential(
+                        nn.Conv2d(256, head_conv,
+                                  kernel_size=3, padding=1, bias=True),
+                        nn.ReLU(inplace=True),
+                        nn.Conv2d(head_conv, num_output,
+                                  kernel_size=1, stride=1, padding=0))
+                else:
+                    fc = nn.Conv2d(
+                        in_channels=256,
+                        out_channels=num_output,
+                        kernel_size=1,
+                        stride=1,
+                        padding=0
+                    )
+                self.__setattr__(head.lower(), fc)
+            self.init_weights(50)
+            return
+
+        self.size_divisibility = self.backbone.size_divisibility
         for head in self.heads:
             classes = self.heads[head]
             if head_conv > 0:
@@ -88,18 +130,11 @@ class CenterNet(nn.Module):
     def forward(self, batched_inputs):
         images, instances = self.preprocess_image(batched_inputs)
         y = self.backbone(images.tensor)
+        y = y[-1] if not self.backbone_type == 'resnet' else self.deconv_layers(y['res4'])
 
         z = {}
         for head in self.heads:
-            if head.lower() == 'hm':
-                head_output = torch.clamp(
-                    self.__getattr__(head.lower())(y[-1]).sigmoid_(),
-                    min=1e-4,
-                    max=1-1e-4
-                )
-                z[head.lower()] = head_output
-            else:
-                z[head.lower()] = self.__getattr__(head.lower())(y[-1])
+            z[head.lower()] = self.__getattr__(head.lower())(y)
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
@@ -128,7 +163,7 @@ class CenterNet(nn.Module):
         else: instances = []
 
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
-        images = ImageList.from_tensors(images, self.backbone.size_divisibility)
+        images = ImageList.from_tensors(images, self.size_divisibility)
         input_shape = np.array(images.tensor.shape[2:])
         output_shape = input_shape // self.backbone.down_ratio
         if not self.training: return images, []
@@ -148,7 +183,7 @@ class CenterNet(nn.Module):
         gt_reg = torch.cat([x["reg"].unsqueeze(0).to(self.device) for x in instances], dim=0)
 
         # sigmoid for heatmap
-        hm_loss = _crit(outputs['hm'], gt_hm)
+        hm_loss = _crit(torch.clamp(outputs['hm'].sigmoid_(), min=1e-4, max=1-1e-4), gt_hm)
         wh_loss = reg_crit(outputs['wh'], gt_reg_mask, gt_ind, gt_wh)
         off_loss = reg_crit(outputs['reg'], gt_reg_mask, gt_ind, gt_reg)
 
@@ -211,6 +246,59 @@ class CenterNet(nn.Module):
         result.pred_classes = class_idxs_all
         return result
 
+    def _make_deconv_layer(self, inplanes, num_layers, num_filters, num_kernels):
+        assert num_layers == len(num_filters), \
+            'ERROR: num_deconv_layers is different len(num_deconv_filters)'
+        assert num_layers == len(num_kernels), \
+            'ERROR: num_deconv_layers is different len(num_deconv_filters)'
+
+        layers = []
+        # inplanes = 1024
+        for i in range(num_layers):
+            kernel, padding, output_padding = num_kernels[i], 1, 0
+
+            planes = num_filters[i]
+            layers.append(
+                nn.ConvTranspose2d(
+                    in_channels=inplanes,
+                    out_channels=planes,
+                    kernel_size=kernel,
+                    stride=2,
+                    padding=padding,
+                    output_padding=output_padding,
+                    bias=False))
+            layers.append(nn.BatchNorm2d(planes, momentum=0.1))
+            layers.append(nn.ReLU(inplace=True))
+            inplanes = planes
+
+        return nn.Sequential(*layers)
+
+    def init_weights(self, num_layers, pretrained=True):
+        if pretrained:
+            for _, m in self.deconv_layers.named_modules():
+                if isinstance(m, nn.ConvTranspose2d):
+                    nn.init.normal_(m.weight, std=0.001)
+                elif isinstance(m, nn.BatchNorm2d):
+                    nn.init.constant_(m.weight, 1)
+                    nn.init.constant_(m.bias, 0)
+            for head in self.heads:
+              final_layer = self.__getattr__(head.lower())
+              for i, m in enumerate(final_layer.modules()):
+                  if isinstance(m, nn.Conv2d):
+                      if m.weight.shape[0] == self.heads[head]:
+                          if 'hm' in head.lower():
+                              nn.init.constant_(m.bias, -2.19)
+                          else:
+                              nn.init.normal_(m.weight, std=0.001)
+                              nn.init.constant_(m.bias, 0)
+            url = model_urls['resnet{}'.format(num_layers)]
+            pretrained_state_dict = model_zoo.load_url(url)
+            print('=> loading pretrained model {}'.format(url))
+            self.load_state_dict(pretrained_state_dict, strict=False)
+        else:
+            print('=> imagenet pretrained model dose not exist')
+            print('=> please download it first')
+            raise ValueError('imagenet pretrained model does not exist')
 
 
 class FocalLoss(nn.Module):
