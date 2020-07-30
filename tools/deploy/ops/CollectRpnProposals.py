@@ -23,7 +23,7 @@ class CollectRpnProposals(SimpleTracer):
             # consistency.
             rpn_max_level=6,
             rpn_min_level=2,
-            rpn_post_nms_topN=100 * 4,  # 2000 * 4,
+            rpn_post_nms_topN=200 * 1,  # 2000 * 1,
         )
         return {
             "rpn_rois": rpn_rois
@@ -43,7 +43,8 @@ if __name__ == '__main__':
 
     m = CollectRpnProposals()
 
-    data = get_inputs("input_list", root="./CollectRpnProposals")
+    data = get_inputs("input_list",
+                      root="/autox-sz/users/dongqixu/share/trt_plugins/CollectRpnProposals")
 
     # CollectRpnProposals does not support cuda backend
     data = {n: data["input_list"][i].cpu() for i, n in enumerate(m.get_input_names())}
@@ -61,6 +62,6 @@ if __name__ == '__main__':
         logger.info(name)
         diff = outputs[name] - tensor
         unique = torch.unique(diff)
-        logger.info("diff\n{}".format(diff))
         logger.info("unique\n{}".format(unique))
-        logger.info("max\n{}".format(unique.max()))
+        logger.info("max\n{}".format(torch.abs(unique).max()))
+        assert torch.abs(unique).max().item() < 1e-3

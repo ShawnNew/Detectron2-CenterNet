@@ -30,12 +30,12 @@ def export_onnx(model, args, f, input_names=None, output_names=None):
         )
 
 
-def get_inputs(*args, root="."):
+def get_inputs(*args, root=".", map_location="cuda"):
     # load tensors from pth
     inputs = {}
     for name in args:
         assert isinstance(name, str), type(name)
-        tensor = torch.load(os.path.join(root, "{}.pt".format(name)), map_location="cuda")
+        tensor = torch.load(os.path.join(root, "{}.pt".format(name)), map_location=map_location)
         inputs[name] = tensor
     return inputs
 
@@ -111,7 +111,8 @@ if __name__ == '__main__':
 
     m = GenerateProposals()
 
-    data = get_inputs("scores", "bbox_deltas", "im_info", "cell_anchors_tensor", root="./GenerateProposals")
+    data = get_inputs("scores", "bbox_deltas", "im_info", "cell_anchors_tensor",
+                      root="/autox-sz/users/dongqixu/share/trt_plugins/GenerateProposals")
     export_onnx(m, data, "model.onnx")
     targets = m(data)
 
@@ -126,6 +127,6 @@ if __name__ == '__main__':
         logger.info(name)
         diff = outputs[name] - tensor
         unique = torch.unique(diff)
-        logger.info("diff\n{}".format(diff))
         logger.info("unique\n{}".format(unique))
-        logger.info("max\n{}".format(unique.max()))
+        logger.info("max\n{}".format(torch.abs(unique).max()))
+        assert torch.abs(unique).max().item() < 1e-3

@@ -199,4 +199,7 @@ if __name__ == "__main__":
                 f.write("engine {}\n".format(os.path.abspath(engine_f)))
                 f.write("time {}\n".format(engine_time))
                 for k, v in metrics.items():
-                    f.write("{} {}\n".format(k, v["AP"]))
+                    if k == "box_proposals":
+                        f.write("{} {}\n".format(k, v["AR@100"]))
+                    elif k == "bbox":
+                        f.write("{} {}\n".format(k, v["AP"]))
