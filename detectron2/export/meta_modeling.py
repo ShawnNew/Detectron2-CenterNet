@@ -227,8 +227,7 @@ class GeneralizedRCNNModel(MetaModel):
         return ["images", "image_sizes", "im_info"]
 
     def get_output_names(self):
-        if hasattr(self._wrapped_model.roi_heads, "mask_pooler") or \
-                hasattr(self._wrapped_model.roi_heads, "mask_head"):
+        if self._cfg.MODEL.MASK_ON:
             return ["pred_boxes", "scores", "pred_classes", "batch_splits", "pred_masks"]
         else:
             return ["pred_boxes", "scores", "pred_classes", "batch_splits"]

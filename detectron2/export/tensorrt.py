@@ -12,9 +12,10 @@ from detectron2.modeling import meta_arch
 from detectron2.modeling.anchor_generator import build_anchor_generator
 from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
+from detectron2.structures import Boxes, Instances, RotatedBoxes
 from termcolor import colored
 
-from .meta_modeling import MetaModel, RetinaNetModel, ProposalModel
+from .meta_modeling import MetaModel, RetinaNetModel, ProposalModel, GeneralizedRCNNModel
 from .onnx_tensorrt import backend, to_cuda
 from .onnx_tensorrt.calibrator import PythonEntropyCalibrator
 from .onnx_tensorrt.tensorrt_engine import Engine
@@ -169,6 +170,73 @@ class TensorRTRetinaNet(TensorRTModel, RetinaNetModel):
         return meta_arch.GeneralizedRCNN._postprocess(results, batched_inputs, image_sizes)
 
 
+class TensorRTGeneralizedRCNN(TensorRTModel, GeneralizedRCNNModel):
+
+    def __init__(self, cfg, engine_path):
+        super(TensorRTGeneralizedRCNN, self).__init__(engine_path)
+        MetaModel.__init__(self, cfg, self._engine)
+
+        # preprocess parameters
+        ns = types.SimpleNamespace()
+        ns.training = False
+        ns.input = self._cfg.INPUT
+        ns.dynamic = self._cfg.INPUT.DYNAMIC
+        ns.device = torch.device(self._cfg.MODEL.DEVICE)
+        ns.pixel_mean = torch.tensor(self._cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1).to(ns.device)
+        ns.pixel_std = torch.tensor(self._cfg.MODEL.PIXEL_STD).view(-1, 1, 1).to(ns.device)
+        # size_divisibility
+        ns.backbone = types.SimpleNamespace()
+        ns.backbone.size_divisibility = 32
+
+        ns.preprocess_image = functools.partial(meta_arch.GeneralizedRCNN.preprocess_image, ns)
+        self._ns = ns
+
+        # reuse convert_inputs defined in TensorRTProposal
+        self._convert_inputs = functools.partial(TensorRTProposal.convert_inputs, self)
+
+    def convert_inputs(self, batched_inputs):
+        return self._convert_inputs(batched_inputs)
+
+    def convert_outputs(self, batched_inputs, inputs, results):
+        output_names = self.get_output_names()
+        assert len(results) == len(output_names)
+
+        m_results = {}
+        for k, v in results.items():
+            assert k in output_names, k
+            m_results[k] = v.to(self._ns.device)
+
+        # TensorRT output number is not dynamic
+        image_sizes = inputs["image_sizes"]
+        m_instances = [Instances(image_size) for image_size in image_sizes]
+
+        # pred_boxes format: (batch_index, x0, y0, x1, y1)
+        pred_boxes = m_results["pred_boxes"][:, 1:]
+        scores = m_results["scores"]
+        pred_classes = m_results["pred_classes"].to(torch.int64)
+        batch_splits = m_results["batch_splits"].to(torch.int64).cpu()
+        pred_masks = m_results.get("pred_masks", None)
+        if pred_boxes.shape[1] == 5:
+            pred_boxes = RotatedBoxes(pred_boxes)
+        else:
+            pred_boxes = Boxes(pred_boxes)
+
+        offset = 0
+        for i in range(len(batched_inputs)):
+            next_offset = offset + batch_splits[i]
+            m_instances[i].pred_boxes = pred_boxes[offset:next_offset]
+            m_instances[i].scores = scores[offset:next_offset]
+            m_instances[i].pred_classes = pred_classes[offset:next_offset]
+            if "pred_masks" in m_results:
+                num_masks = batch_splits[i]
+                indices = torch.arange(num_masks, device=pred_classes.device)
+                m_instances[i].pred_masks = \
+                    pred_masks[offset:next_offset][indices, m_instances[i].pred_classes][:, None]
+            offset += int(len(pred_boxes) / len(batched_inputs))
+
+        return meta_arch.GeneralizedRCNN._postprocess(m_instances, batched_inputs, image_sizes)
+
+
 class TensorRTProposal(TensorRTModel, ProposalModel):
 
     def __init__(self, cfg, engine_path):
@@ -224,6 +292,7 @@ class TensorRTProposal(TensorRTModel, ProposalModel):
 
 
 META_ARCH_TENSORRT_EXPORT_TYPE_MAP = {
+    "GeneralizedRCNN": TensorRTGeneralizedRCNN,
     "RetinaNet": TensorRTRetinaNet,
     "ProposalNetwork": TensorRTProposal,
 }

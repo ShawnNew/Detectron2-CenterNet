@@ -159,9 +159,6 @@ class Caffe2Compatible(object):
 
 
 class Caffe2RPN(Caffe2Compatible, rpn.RPN):
-    """
-    Todo: check batch performance of GenerateProposals and CollectRpnProposals.
-    """
 
     def forward(self, images, features, gt_instances=None):
         assert not self.training
@@ -297,20 +294,20 @@ class Caffe2ROIPooler(Caffe2Compatible, poolers.ROIPooler):
 
         # boxes with size (N, 4) does not contain batch_ids information
         # convert boxes to pooler format with the given batch_splits
-        # Todo: onnx support required
-        if pooler_fmt_boxes.shape[1] == 4:
-            assert len(batch_splits) == 1 and isinstance(batch_splits[0], torch.Tensor)
-            batch_splits = batch_splits[0].to(dtype=torch.int64)
-            batch_ids = cat(
-                [
-                    torch.full((b, 1), i, dtype=pooler_fmt_boxes.dtype, device=pooler_fmt_boxes.device)
-                    for i, b in enumerate(int(x.item()) for x in batch_splits)
-                ],
-                dim=0,
-            )
-            pooler_fmt_boxes = cat([batch_ids, pooler_fmt_boxes], dim=1)
-        assert pooler_fmt_boxes.shape[1] == 5, \
-            "Boxes with shape {} should be converted to pooler format".format(pooler_fmt_boxes.shape)
+        if not torch.onnx.is_in_onnx_export():
+            if pooler_fmt_boxes.shape[1] == 4:
+                assert len(batch_splits) == 1 and isinstance(batch_splits[0], torch.Tensor)
+                batch_splits = batch_splits[0].to(dtype=torch.int64)
+                batch_ids = cat(
+                    [
+                        torch.full((b, 1), i, dtype=pooler_fmt_boxes.dtype, device=pooler_fmt_boxes.device)
+                        for i, b in enumerate(int(x.item()) for x in batch_splits)
+                    ],
+                    dim=0,
+                )
+                pooler_fmt_boxes = cat([batch_ids, pooler_fmt_boxes], dim=1)
+            assert pooler_fmt_boxes.shape[1] == 5, \
+                "Boxes with shape {} should be converted to pooler format".format(pooler_fmt_boxes.shape)
 
         if num_level_assignments == 1:
             if isinstance(self.level_poolers[0], ROIAlignRotated):

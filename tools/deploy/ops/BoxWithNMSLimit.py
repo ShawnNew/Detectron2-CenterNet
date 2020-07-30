@@ -68,6 +68,7 @@ if __name__ == '__main__':
 
     # get sort indices for nms
     _, indices = targets["roi_score_nms"].sort(descending=True)
+    outputs["roi_bbox_nms"] = outputs["roi_bbox_nms"][:, 1:]
 
     # compare torch output and tensorrt output
     assert len(targets) == len(outputs), "Number of outputs does not match!"
