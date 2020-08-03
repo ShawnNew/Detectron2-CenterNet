@@ -454,6 +454,39 @@ _C.MODEL.RETINANET.SMOOTH_L1_LOSS_BETA = 0.1
 
 
 # ---------------------------------------------------------------------------- #
+# CenterNet
+# ---------------------------------------------------------------------------- #
+_C.MODEL.CENTERNET = CN()
+
+# Number of foreground class of COCO
+_C.MODEL.CENTERNET.NUM_CLASSES = 80
+
+# Model architecture
+_C.MODEL.CENTERNET.LEVELS = [1, 1, 1, 2, 2, 1]
+_C.MODEL.CENTERNET.CHANNELS = [16, 32, 64, 128, 256, 512]
+_C.MODEL.CENTERNET.DOWN_RATIO = 4
+_C.MODEL.CENTERNET.LAST_LEVEL = 5
+_C.MODEL.CENTERNET.HEAD_CONV = 256
+_C.MODEL.CENTERNET.FINAL_KERNEL = 1
+_C.MODEL.CENTERNET.SIZE_DIVISIBILITY = 32
+
+# Loss settings, weights of heatmap, size and offset.
+_C.MODEL.CENTERNET.HM_WEIGHT = 1
+_C.MODEL.CENTERNET.WH_WEIGHT = 0.1
+_C.MODEL.CENTERNET.OFF_WEIGHT = 1
+_C.MODEL.CENTERNET.FOCAL_LOSS_ALPHA = [0.25]
+
+# Task parameters, e.g. detection, 3D detection and keypoints,etc.
+_C.MODEL.CENTERNET.TASK = CN()
+_C.MODEL.CENTERNET.TASK.HM = 80
+_C.MODEL.CENTERNET.TASK.WH = 2
+_C.MODEL.CENTERNET.TASK.REG = 2
+
+# Inference score threshold, prediction score must have score > threshold
+_C.MODEL.CENTERNET.SCORE_THRESH_TEST = 0.05
+_C.MODEL.CENTERNET.TOPK_CANDIDATES_TEST = 100
+
+# ---------------------------------------------------------------------------- #
 # ResNe[X]t options (ResNets = {ResNet, ResNeXt}
 # Note that parts of a resnet may be used for both the backbone and the head
 # These options apply to both

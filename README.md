@@ -1,3 +1,8 @@
+This is re-implementation of CenterNet based on detectron2, please 
+use `configs/COCO-Detection/ctdet_dla_34_1x.yaml` for centernet
+configuration. 
+
+
 <img src=".github/Detectron2-Logo-Horz.svg" width="300" >
 
 Detectron2 is Facebook AI Research's next generation software system

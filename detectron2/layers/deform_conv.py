@@ -10,6 +10,7 @@ from torch.nn.modules.utils import _pair
 from detectron2 import _C
 
 from .wrappers import _NewEmptyTensorOp
+from .DCNv2.dcn_v2 import DCN
 
 
 class _DeformConv(Function):
@@ -492,3 +493,27 @@ class ModulatedDeformConv(nn.Module):
         tmpstr += ", deformable_groups=" + str(self.deformable_groups)
         tmpstr += ", bias=" + str(self.with_bias)
         return tmpstr
+
+
+class DeformConvV2(nn.Module):
+    def __init__(self, chi, cho):
+        super(DeformConvV2, self).__init__()
+        self.actf = nn.Sequential(
+            nn.BatchNorm2d(cho, momentum=0.1),
+            nn.ReLU(inplace=True)
+        )
+        self.conv = DCN(
+            chi,
+            cho,
+            kernel_size=(3,3),
+            stride=1,
+            padding=1,
+            dilation=1,
+            deformable_groups=1
+        )
+        nn.init.uniform_(self.actf[0].weight.data)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.actf(x)
+        return x

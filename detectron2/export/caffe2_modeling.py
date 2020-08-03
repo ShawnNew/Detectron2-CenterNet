@@ -490,8 +490,48 @@ class Caffe2RetinaNet(Caffe2MetaArch):
         return f
 
 
+class Caffe2CenterNet(Caffe2MetaArch):
+    def __init__(self, cfg, torch_model):
+        assert isinstance(torch_model, meta_arch.CenterNet)
+        super().__init__(cfg, torch_model)
+
+
+    def get_caffe2_inputs(self, batched_inputs):
+        images, _ = self._wrapped_model.preprocess_image(batched_inputs)
+        return {
+            "images": images.tensor,
+            "image_sizes": torch.tensor(images.image_sizes, dtype=torch.float),
+        }
+
+    @mock_torch_nn_functional_interpolate()
+    def forward(self, inputs):
+        assert self.tensor_mode
+        images = inputs['images']
+        # images = self._caffe2_preprocess_image(inputs)
+        features = self._wrapped_model.backbone(images)
+        y = self._wrapped_model.deconv_layers(features['res4'])
+        z = {}
+        for head in self._wrapped_model.heads:
+            z[head.lower()] = self._wrapped_model.__getattr__(head.lower())(y)
+
+        results = {}
+        for k, v in z.items():
+            results[k] = v
+
+        results['image_sizes'] = inputs['image_sizes']
+
+        return results
+
+    def get_input_names(self):
+        return ['images', 'image_sizes']
+
+    def get_output_names(self):
+        return ['hm', 'wh', 'reg', 'in_image_sizes']
+
+
 META_ARCH_CAFFE2_EXPORT_TYPE_MAP = {
     "GeneralizedRCNN": Caffe2GeneralizedRCNN,
     "PanopticFPN": Caffe2PanopticFPN,
     "RetinaNet": Caffe2RetinaNet,
+    "CenterNet": Caffe2CenterNet,
 }
