@@ -263,7 +263,7 @@ def transform_instance_annotations(
     Args:
         annotation (dict): dict of instance annotations for a single instance.
             It will be modified in-place.
-        transforms (TransformList):
+        transforms (TransformList or list[Transform]):
         image_size (tuple): the height, width of the transformed image
         keypoint_hflip_indices (ndarray[int]): see `create_keypoint_hflip_indices`.
 
@@ -273,10 +273,12 @@ def transform_instance_annotations(
             transformed according to `transforms`.
             The "bbox_mode" field will be set to XYXY_ABS.
     """
+    if isinstance(transforms, (tuple, list)):
+        transforms = T.TransformList(transforms)
     # bbox is 1d (per-instance bounding box)
     bbox = BoxMode.convert(annotation["bbox"], annotation["bbox_mode"], BoxMode.XYXY_ABS)
     # clip transformed bbox to image size
-    bbox = transforms.apply_box([bbox])[0].clip(min=0)
+    bbox = transforms.apply_box(np.array([bbox]))[0].clip(min=0)
     annotation["bbox"] = np.minimum(bbox, list(image_size + image_size)[::-1])
     annotation["bbox_mode"] = BoxMode.XYXY_ABS
 
@@ -496,7 +498,7 @@ def create_keypoint_hflip_indices(dataset_names):
     flip_map.update({v: k for k, v in flip_map.items()})
     flipped_names = [i if i not in flip_map else flip_map[i] for i in names]
     flip_indices = [names.index(i) for i in flipped_names]
-    return np.asarray(flip_indices)
+    return np.asarray(flip_indices, dtype=np.int32)
 
 
 def gen_crop_transform_with_instance(crop_size, image_size, instance):
@@ -574,17 +576,9 @@ def build_augmentation(cfg, is_train):
         min_size = cfg.INPUT.MIN_SIZE_TEST
         max_size = cfg.INPUT.MAX_SIZE_TEST
         sample_style = "choice"
-    if sample_style == "range":
-        assert len(min_size) == 2, "more than 2 ({}) min_size(s) are provided for ranges".format(
-            len(min_size)
-        )
-
-    logger = logging.getLogger(__name__)
-    augmentation = []
-    augmentation.append(T.ResizeShortestEdge(min_size, max_size, sample_style))
+    augmentation = [T.ResizeShortestEdge(min_size, max_size, sample_style)]
     if is_train:
         augmentation.append(T.RandomFlip())
-        logger.info("Augmentations used in training: " + str(augmentation))
     return augmentation
 
 

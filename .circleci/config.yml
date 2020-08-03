@@ -43,7 +43,7 @@ install_dep: &install_dep
       name: Install Dependencies
       command: |
         pip install --progress-bar off -U 'git+https://github.com/facebookresearch/fvcore'
-        pip install --progress-bar off opencv-python
+        pip install --progress-bar off opencv-python pytest-xdist
         pip install --progress-bar off torch torchvision
 
 install_detectron2: &install_detectron2
@@ -67,13 +67,13 @@ run_unittests: &run_unittests
   - run:
       name: Run Unit Tests
       command: |
-        python -m unittest discover -v -s tests
+        pytest -n 1 -v tests  # parallel causes some random failures
 
 # -------------------------------------------------------------------------------------
 # Jobs to run
 # -------------------------------------------------------------------------------------
 jobs:
-  cpu_tests:
+  linux_cpu_tests:
     <<: *cpu
 
     working_directory: ~/detectron2
@@ -85,33 +85,19 @@ jobs:
       # Cache the venv directory that contains dependencies
       - restore_cache:
           keys:
-            - cache-key-{{ .Branch }}-ID-20200425
+            - cache-key-{{ .Branch }}-ID-20200730
 
       - <<: *install_dep
 
       - save_cache:
           paths:
             - ~/venv
-          key: cache-key-{{ .Branch }}-ID-20200425
+          key: cache-key-{{ .Branch }}-ID-20200730
 
       - <<: *install_detectron2
-
-      - run:
-          name: isort
-          command: |
-            isort -c -sp .
-      - run:
-          name: black
-          command: |
-            black --check -l 100 .
-      - run:
-          name: flake8
-          command: |
-            flake8 .
-
       - <<: *run_unittests
 
-  gpu_tests:
+  linux_gpu_tests:
     <<: *gpu
 
     parameters:
@@ -163,18 +149,22 @@ jobs:
       - run:
           name: Run Unit Tests
           command: |
-            docker exec -e CIRCLECI=true -it d2 python3 -m unittest discover -v -s /detectron2/tests
+            docker exec -e CIRCLECI=true -it d2 python3 -m pytest -n 2 -v /detectron2/tests
 
 workflows:
   version: 2
   regular_test:
     jobs:
-      - cpu_tests
-      - gpu_tests:
-          name: gpu_tests_pytorch1.4
+      - linux_cpu_tests
+      - linux_gpu_tests:
+          name: linux_gpu_tests_pytorch1.4
           pytorch_version: '1.4'
           torchvision_version: '0.5'
-      - gpu_tests:
-          name: gpu_tests_pytorch1.5
+      - linux_gpu_tests:
+          name: linux_gpu_tests_pytorch1.5
           pytorch_version: '1.5'
           torchvision_version: '0.6'
+      - linux_gpu_tests:
+          name: linux_gpu_tests_pytorch1.6
+          pytorch_version: '1.6'
+          torchvision_version: '0.7'
