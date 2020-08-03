@@ -201,6 +201,7 @@ class CenterNet(nn.Module):
         :return: 
         """"""results (List[Instances]): a list of #images elements.
         """
+        outputs['hm'] = torch.clamp(outputs['hm'].sigmoid_(), min=1e-4, max=1-1e-4)
         results = []
         for img_idx, image_size in enumerate(image_sizes):
             output = {

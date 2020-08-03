@@ -123,7 +123,8 @@ class Caffe2Tracer:
             onnx.ModelProto: an onnx model.
         """
         model, inputs = self._get_traceable()
-        return export_onnx_model_impl(model, (inputs,))
+        return export_onnx_model_impl(model, (inputs,), input_names=model.get_input_names(),
+                                      output_names=model.get_output_names())
 
     def export_torchscript(self):
         """

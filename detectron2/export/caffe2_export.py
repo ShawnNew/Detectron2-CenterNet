@@ -30,7 +30,7 @@ from .shared import (
 logger = logging.getLogger(__name__)
 
 
-def export_onnx_model(model, inputs):
+def export_onnx_model(model, inputs, input_names=None, output_names=None):
     """
     Trace and export a model to onnx format.
 
@@ -58,7 +58,9 @@ def export_onnx_model(model, inputs):
                 inputs,
                 f,
                 operator_export_type=OperatorExportTypes.ONNX_ATEN_FALLBACK,
-                # verbose=True,  # NOTE: uncomment this for debugging
+                verbose=True,  # NOTE: uncomment this for debugging
+                input_names=input_names,
+                output_names=output_names
                 # export_params=True,
             )
             onnx_model = onnx.load_from_string(f.getvalue())
