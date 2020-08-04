@@ -269,7 +269,8 @@ class Engine(object):
             assert callable(Profiler), "Profiler is not callable"
             self.context.profiler = Profiler()
         else:
-            logger.error("Fail to import TensorRT profiler")
+            # logger.error("Fail to import TensorRT profiler")
+            pass
 
     def __del__(self):
         if self.engine is not None:

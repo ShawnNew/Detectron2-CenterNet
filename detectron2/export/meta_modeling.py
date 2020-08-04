@@ -147,6 +147,52 @@ class RetinaNetModel(MetaModel):
             output_names.append("box_delta_{}".format(i))
         return output_names
 
+class CenterNetModel(MetaModel):
+    def __init__(self, cfg, torch_model):
+        assert isinstance(torch_model, meta_arch.CenterNet)
+        super().__init__(cfg, torch_model)
+
+    def convert_inputs(self, batched_inputs):
+        images, _ = self._wrapped_model.preprocess_image(batched_inputs)
+        return {
+            "images": images.tensor,
+            "image_sizes": torch.tensor(images.image_sizes, dtype=torch.float),
+        }
+
+    def convert_outputs(self, batched_inputs, inputs, results):
+        import pdb; pdb.set_trace()
+        results = self._wrapped_model.inference(results, inputs['image_sizes'])
+        processed_results = []
+        for results_per_image, input_per_image, image_size in zip(
+            results, batched_inputs, inputs['image_sizes']
+        ):
+            original_height = input_per_image.get("height", image_size[0])
+            original_width = input_per_image.get("width", image_size[1])
+            r = detector_postprocess(results_per_image, original_height, original_width)
+            processed_results.append({"instances": r})
+        return processed_results
+
+    def inference(self, inputs):
+        assert isinstance(self._wrapped_model, meta_arch.CenterNet)
+        images = inputs['images']
+        features = self._wrapped_model.backbone(images)
+        y = self._wrapped_model.deconv_layers(features['res4'])
+        z = {}
+        for head in self._wrapped_model.heads:
+            z[head.lower()] = self._wrapped_model.__getattr__(head.lower())(y)
+
+        results = {}
+        for k, v in z.items():
+            results[k] = v
+
+        return results
+
+    def get_input_names(self):
+        return ['images', 'image_sizes']
+
+    def get_output_names(self):
+        return ['hm', 'wh', 'reg']
+
 
 class GeneralizedRCNNModel(MetaModel):
 
@@ -405,4 +451,5 @@ META_ARCH_ONNX_EXPORT_TYPE_MAP = {
     "GeneralizedRCNN": GeneralizedRCNNModel,
     "RetinaNet": RetinaNetModel,
     "ProposalNetwork": ProposalModel,
+    "CenterNet": CenterNetModel,
 }

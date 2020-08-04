@@ -15,7 +15,7 @@ from detectron2.modeling.meta_arch.retinanet import permute_to_N_HWA_K
 from detectron2.structures import Boxes, Instances, RotatedBoxes
 from termcolor import colored
 
-from .meta_modeling import MetaModel, RetinaNetModel, ProposalModel, GeneralizedRCNNModel
+from .meta_modeling import MetaModel, RetinaNetModel, ProposalModel, GeneralizedRCNNModel, CenterNetModel
 from .onnx_tensorrt import backend, to_cuda
 from .onnx_tensorrt.calibrator import PythonEntropyCalibrator
 from .onnx_tensorrt.tensorrt_engine import Engine
@@ -290,9 +290,67 @@ class TensorRTProposal(TensorRTModel, ProposalModel):
             m_results[k] = v.to(self._ns.device)
         return super(TensorRTProposal, self).convert_outputs(batched_inputs, inputs, m_results)
 
+class TensorRTCenterNet(TensorRTModel, CenterNetModel):
+
+    def __init__(self, cfg, engine_path):
+        super(TensorRTCenterNet, self).__init__(engine_path)
+        MetaModel.__init__(self, cfg, self._engine)
+
+        # preprocess parameters
+        ns = types.SimpleNamespace()
+        ns.training = False
+        ns.input = cfg.INPUT
+        ns.dynamic = cfg.INPUT.DYNAMIC
+        ns.device = torch.device(cfg.MODEL.DEVICE)
+        ns.pixel_mean = torch.tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1).to(ns.device)
+        ns.pixel_std = torch.tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1).to(ns.device)
+
+        ns.preprocess_image = functools.partial(meta_arch.CenterNet.preprocess_image, ns)
+        ns.inference = functools.partial(meta_arch.CenterNet.inference, ns)
+        ns.inference_single_image = functools.partial(meta_arch.CenterNet.inference_single_image, ns)
+        ns.topk_candidates = 100
+        ns.score_threshold = 0.5
+        ns.max_detections_per_image = 100
+
+
+        # size_divisibility
+        ns.backbone = types.SimpleNamespace()
+        ns.backbone.size_divisibility = 16
+        ns.size_divisibility = 16
+        ns.backbone.down_ratio = 4
+        self._ns = ns
+
+    def convert_inputs(self, batched_inputs):
+        images, _ = self._ns.preprocess_image(batched_inputs)
+
+        # compute scales and im_info
+        assert not self._ns.training
+        return {
+            "images": images.tensor,
+            "image_sizes": torch.tensor(images.image_sizes),
+        }
+
+    def convert_outputs(self, batched_inputs, inputs, results):
+        output_names = self.get_output_names()
+        assert len(results) == len(output_names)
+        results = self._ns.inference(results, inputs['image_sizes'])
+
+        from detectron2.modeling.postprocessing import detector_postprocess
+        processed_results = []
+        for results_per_image, input_per_image, image_size in zip(
+                results, batched_inputs, inputs['image_sizes']
+        ):
+            original_height = input_per_image.get("height", image_size[0])
+            original_width = input_per_image.get("width", image_size[1])
+            r = detector_postprocess(results_per_image, original_height, original_width)
+            processed_results.append({"instances": r})
+        return processed_results
+
+
 
 META_ARCH_TENSORRT_EXPORT_TYPE_MAP = {
     "GeneralizedRCNN": TensorRTGeneralizedRCNN,
     "RetinaNet": TensorRTRetinaNet,
     "ProposalNetwork": TensorRTProposal,
+    "CenterNet": TensorRTCenterNet
 }
