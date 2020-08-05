@@ -308,9 +308,9 @@ class TensorRTCenterNet(TensorRTModel, CenterNetModel):
         ns.preprocess_image = functools.partial(meta_arch.CenterNet.preprocess_image, ns)
         ns.inference = functools.partial(meta_arch.CenterNet.inference, ns)
         ns.inference_single_image = functools.partial(meta_arch.CenterNet.inference_single_image, ns)
-        ns.topk_candidates = 100
-        ns.score_threshold = 0.5
-        ns.max_detections_per_image = 100
+        ns.topk_candidates = cfg.MODEL.CENTERNET.TOPK_CANDIDATES_TEST
+        ns.score_threshold = cfg.MODEL.CENTERNET.SCORE_THRESH_TEST
+        ns.max_detections_per_image = cfg.TEST.DETECTIONS_PER_IMAGE
 
 
         # size_divisibility
@@ -327,18 +327,18 @@ class TensorRTCenterNet(TensorRTModel, CenterNetModel):
         assert not self._ns.training
         return {
             "images": images.tensor,
-            "image_sizes": torch.tensor(images.image_sizes),
+            "im_info": torch.tensor(images.image_sizes),
         }
 
     def convert_outputs(self, batched_inputs, inputs, results):
         output_names = self.get_output_names()
         assert len(results) == len(output_names)
-        results = self._ns.inference(results, inputs['image_sizes'])
+        results = self._ns.inference(results, inputs['im_info'])
 
         from detectron2.modeling.postprocessing import detector_postprocess
         processed_results = []
         for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, inputs['image_sizes']
+                results, batched_inputs, inputs['im_info']
         ):
             original_height = input_per_image.get("height", image_size[0])
             original_width = input_per_image.get("width", image_size[1])

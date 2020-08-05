@@ -26,8 +26,8 @@ def setup_cfg(args):
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     cfg.freeze()
-    # if cfg.MODEL.DEVICE != "cpu":
-    #     assert TORCH_VERSION >= (1, 5), "PyTorch>=1.5 required for GPU conversion!"
+    if cfg.MODEL.DEVICE != "cpu":
+        assert TORCH_VERSION >= (1, 5), "PyTorch>=1.5 required for GPU conversion!"
     return cfg
 
 

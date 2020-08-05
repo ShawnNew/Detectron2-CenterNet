@@ -80,6 +80,7 @@ class MetaModel(torch.nn.Module):
             m_inputs = self.convert_inputs(inputs)
         with Timer() as inference:
             m_results = self.inference(m_inputs)
+            torch.cuda.synchronize()
         with Timer() as postprocess:
             m_outputs = self.convert_outputs(inputs, m_inputs, m_results)
         logger.debug("preprocess: {:6.2f} ms,  inference: {:6.2f} ms, postprocess: {:6.2f} ms".format(
@@ -156,15 +157,14 @@ class CenterNetModel(MetaModel):
         images, _ = self._wrapped_model.preprocess_image(batched_inputs)
         return {
             "images": images.tensor,
-            "image_sizes": torch.tensor(images.image_sizes, dtype=torch.float),
+            "im_info": torch.tensor(images.image_sizes),
         }
 
     def convert_outputs(self, batched_inputs, inputs, results):
-        import pdb; pdb.set_trace()
-        results = self._wrapped_model.inference(results, inputs['image_sizes'])
+        results = self._wrapped_model.inference(results, inputs['im_info'])
         processed_results = []
         for results_per_image, input_per_image, image_size in zip(
-            results, batched_inputs, inputs['image_sizes']
+            results, batched_inputs, inputs['im_info']
         ):
             original_height = input_per_image.get("height", image_size[0])
             original_width = input_per_image.get("width", image_size[1])
@@ -177,18 +177,13 @@ class CenterNetModel(MetaModel):
         images = inputs['images']
         features = self._wrapped_model.backbone(images)
         y = self._wrapped_model.deconv_layers(features['res4'])
-        z = {}
-        for head in self._wrapped_model.heads:
-            z[head.lower()] = self._wrapped_model.__getattr__(head.lower())(y)
-
         results = {}
-        for k, v in z.items():
-            results[k] = v
-
+        for head in self._wrapped_model.heads:
+            results[head.lower()] = self._wrapped_model.__getattr__(head.lower())(y)
         return results
 
     def get_input_names(self):
-        return ['images', 'image_sizes']
+        return ['images', 'im_info']
 
     def get_output_names(self):
         return ['hm', 'wh', 'reg']

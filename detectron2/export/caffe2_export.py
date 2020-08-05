@@ -61,7 +61,7 @@ def export_onnx_model(model, inputs, input_names=None, output_names=None):
                 f,
                 operator_export_type=OperatorExportTypes.ONNX,
                 verbose=True,  # NOTE: uncomment this for debugging
-                opset_version=11,
+                # opset_version=11,
                 keep_initializers_as_inputs=True,
                 input_names=input_names,
                 output_names=output_names,
