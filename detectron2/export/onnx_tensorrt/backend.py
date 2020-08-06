@@ -134,7 +134,7 @@ class TensorRTBackendRep(BackendRep):
                            for i in range(layer.num_inputs)]
             output_shape = ["{} {}".format(layer.get_output(i).name, layer.get_output(i).shape)
                             for i in range(layer.num_outputs)]
-            print("{:40} : {:30} -> {:30}".format(layer.name, ", ".join(input_shape), ", ".join(output_shape)))
+            print("{:80} : {:80} -> {:80}".format(layer.name, ", ".join(input_shape), ", ".join(output_shape)))
         logger.info("NetworkInput:")
         for i in range(self.network.num_inputs):
             tensor = self.network.get_input(i)
