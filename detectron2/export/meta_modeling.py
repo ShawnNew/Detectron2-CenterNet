@@ -411,6 +411,11 @@ def override_node_names(onnx_model):
     onnx.checker.check_model(onnx_model)
     logger.info("override_node_names:")
 
+    # keep onnx model bindings unchanged
+    model_bindings = set.union(
+        set([node.name for node in onnx_model.graph.input]),
+        set([node.name for node in onnx_model.graph.output]))
+
     node_names = {}
     tensor_names = {}
     for node in onnx_model.graph.node:
@@ -442,7 +447,8 @@ def override_node_names(onnx_model):
 
         # generate tensor names mapping
         assert len(node.output) == 1, node
-        tensor_names[node.output[0]] = node.name + ".out"
+        if node.output[0] not in model_bindings:
+            tensor_names[node.output[0]] = node.name + ".out"
 
     # override tensor names
     for node in onnx_model.graph.node:
