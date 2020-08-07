@@ -370,21 +370,21 @@ def trace_context(model):
     model._trace_mode = trace_mode
 
 
+def _rename_node_input_output(_node, _src, _dst):
+    for _i, name in enumerate(_node.input):
+        if name == _src:
+            logger.info("rename {} input: {} -> {}".format(_node.name, _src, _dst))
+            _node.input[_i] = _dst
+    for _i, name in enumerate(_node.output):
+        if name == _src:
+            logger.info("rename {} output: {} -> {}".format(_node.name, _src, _dst))
+            _node.output[_i] = _dst
+
+
 def remove_copy_between_cpu_and_gpu(onnx_model):
     """
     In-place remove copy ops between cpu/gpu in onnx model.
     """
-
-    def _rename_node_input_output(_node, _src, _dst):
-        for _i, name in enumerate(_node.input):
-            if name == _src:
-                logger.info("rename {} input: {} -> {}".format(_node.name, _src, _dst))
-                _node.input[_i] = _dst
-        for _i, name in enumerate(_node.output):
-            if name == _src:
-                logger.info("rename {} output: {} -> {}".format(_node.name, _src, _dst))
-                _node.output[_i] = _dst
-
     _COPY_OPS = ["CopyCPUToGPU", "CopyGPUToCPU"]
 
     onnx.checker.check_model(onnx_model)
@@ -410,12 +410,14 @@ def remove_copy_between_cpu_and_gpu(onnx_model):
             node_index[src] = len(identities)
             node_index[dst] = len(identities)
             identities.append({src, dst})
-        elif src_i > 0 and dst_i < 0:
+        elif src_i >= 0 and dst_i < 0:
             node_index[dst] = node_index[src]
             identities[src_i].add(dst)
-        elif src_i < 0 and dst_i > 0:
+        elif src_i < 0 and dst_i >= 0:
             node_index[src] = node_index[dst]
             identities[dst_i].add(src)
+        else:
+            assert src_i == dst_i, "{} != {}".format(src_i, dst_i)
 
     # keep onnx model bindings unchanged
     model_bindings = set.union(
@@ -429,6 +431,7 @@ def remove_copy_between_cpu_and_gpu(onnx_model):
             identity = binding
         identities[i] = sorted(list(identity))[-1]
 
+    logger.info("remove_copy_between_cpu_and_gpu:")
     for node in remove_list:
         logger.info("remove {}: {} -> {}".format(node.name, node.input[0], node.output[0]))
         onnx_model.graph.node.remove(node)
@@ -437,6 +440,61 @@ def remove_copy_between_cpu_and_gpu(onnx_model):
             dst = identities[idx]
             if src != dst:
                 _rename_node_input_output(node, src, dst)
+
+    onnx.checker.check_model(onnx_model)
+    return onnx_model
+
+
+def override_node_names(onnx_model):
+    """
+    In-place override node names and input/output names.
+    """
+    onnx.checker.check_model(onnx_model)
+    logger.info("override_node_names:")
+
+    # keep onnx model bindings unchanged
+    model_bindings = set.union(
+        set([node.name for node in onnx_model.graph.input]),
+        set([node.name for node in onnx_model.graph.output]))
+
+    node_names = {}
+    tensor_names = {}
+    for node in onnx_model.graph.node:
+        node_name = ""
+        # identify node by weights
+        for node_input in node.input:
+            if node_input.startswith("_wrapped_model") and node_input.endswith(".weight"):
+                node_name = node_input.replace("_wrapped_model.", "").rsplit(".", maxsplit=1)[0]
+                break
+
+        if not node_name:
+            # modify node names without weights
+            if node.op_type in ["Relu", "MaxPool", "Add", "Resize"]:
+                last_name = list(node_names.keys())[-1]
+                node_name = last_name + "." + node.op_type.lower()
+            else:
+                logger.info("ignore node {} : {}".format(node.name, node.op_type))
+                continue
+
+        if node_name in node_names:
+            # use _i as node name suffix
+            suffix = "_{}".format(node_names[node_name])
+            node_names[node_name] += 1
+            node_name += suffix
+        assert node_name not in node_names, node_name
+        logger.info("rename {} -> {}".format(node.name, node_name))
+        node.name = node_name
+        node_names[node_name] = 1
+
+        # generate tensor names mapping
+        assert len(node.output) == 1, node
+        if node.output[0] not in model_bindings:
+            tensor_names[node.output[0]] = node.name + ".out"
+
+    # override tensor names
+    for node in onnx_model.graph.node:
+        for src, dst in tensor_names.items():
+            _rename_node_input_output(node, src, dst)
 
     onnx.checker.check_model(onnx_model)
     return onnx_model

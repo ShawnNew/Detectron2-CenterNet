@@ -10,7 +10,8 @@ from detectron2.config import CfgNode as CN
 
 from .caffe2_inference import ProtobufDetectionModel
 from .caffe2_modeling import META_ARCH_CAFFE2_EXPORT_TYPE_MAP, convert_batched_inputs_to_c2_format
-from .meta_modeling import META_ARCH_ONNX_EXPORT_TYPE_MAP, trace_context, remove_copy_between_cpu_and_gpu
+from .meta_modeling import META_ARCH_ONNX_EXPORT_TYPE_MAP, trace_context, \
+    remove_copy_between_cpu_and_gpu, override_node_names
 from .shared import get_pb_arg_vali, get_pb_arg_vals, save_graph
 
 __all__ = [
@@ -131,7 +132,9 @@ class Caffe2Tracer:
         with trace_context(model):
             onnx_model = export_onnx_model_impl(model, (inputs,), input_names=model.get_input_names(),
                                                 output_names=model.get_output_names())
-        return model, remove_copy_between_cpu_and_gpu(onnx_model)
+            onnx_model = remove_copy_between_cpu_and_gpu(onnx_model)
+            onnx_model = override_node_names(onnx_model)
+        return model, onnx_model
 
     def export_torchscript(self):
         """
