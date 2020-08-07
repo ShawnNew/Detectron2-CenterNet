@@ -14,7 +14,7 @@ import torch.utils.model_zoo as model_zoo
 
 
 __all__ = [
-    "CenterNet",
+    "CenterNet", "ctdet_decode"
 ]
 
 model_urls = {
@@ -134,7 +134,15 @@ class CenterNet(nn.Module):
 
         z = {}
         for head in self.heads:
-            z[head.lower()] = self.__getattr__(head.lower())(y)
+            head = head.lower()
+            if head == 'hm':
+                z[head] = torch.clamp(
+                    self.__getattr__(head)(y),
+                    min=1e-4,
+                    max=1 - 1e-4
+                )
+            else:
+                z[head] = self.__getattr__(head)(y)
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
@@ -201,7 +209,7 @@ class CenterNet(nn.Module):
         :return: 
         """"""results (List[Instances]): a list of #images elements.
         """
-        outputs['hm'] = torch.clamp(outputs['hm'].sigmoid_(), min=1e-4, max=1-1e-4)
+        # outputs['hm'] = torch.clamp(outputs['hm'].sigmoid_(), min=1e-4, max=1-1e-4)
         results = []
         for img_idx, image_size in enumerate(image_sizes):
             output = {

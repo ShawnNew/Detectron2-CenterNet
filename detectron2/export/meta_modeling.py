@@ -179,7 +179,15 @@ class CenterNetModel(MetaModel):
         y = self._wrapped_model.deconv_layers(features['res4'])
         results = {}
         for head in self._wrapped_model.heads:
-            results[head.lower()] = self._wrapped_model.__getattr__(head.lower())(y)
+            head = head.lower()
+            if head == 'hm':
+                results[head] = torch.clamp(
+                    self._wrapped_model.__getattr__(head)(y),
+                    min=1e-4,
+                    max=1-1e-4
+                )
+            else:
+                results[head] = self._wrapped_model.__getattr__(head)(y)
         return results
 
     def get_input_names(self):
