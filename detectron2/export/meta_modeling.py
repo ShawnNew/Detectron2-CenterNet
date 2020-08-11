@@ -181,8 +181,9 @@ class CenterNetModel(MetaModel):
         for head in self._wrapped_model.heads:
             head = head.lower()
             if head == 'hm':
+                # embed sigmoid and clamp into onnx model for post-processing simplicity.
                 results[head] = torch.clamp(
-                    self._wrapped_model.__getattr__(head)(y),
+                    self._wrapped_model.__getattr__(head)(y).sigmoid_(),
                     min=1e-4,
                     max=1-1e-4
                 )

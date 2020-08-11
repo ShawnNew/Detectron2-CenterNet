@@ -135,20 +135,14 @@ class CenterNet(nn.Module):
         z = {}
         for head in self.heads:
             head = head.lower()
-            if head == 'hm':
-                z[head] = torch.clamp(
-                    self.__getattr__(head)(y),
-                    min=1e-4,
-                    max=1 - 1e-4
-                )
-            else:
-                z[head] = self.__getattr__(head)(y)
+            z[head] = self.__getattr__(head)(y)
 
         if self.training:
             assert "instances" in batched_inputs[0], "Instance annotations are missing in training!"
             losses = self.losses(z, instances)
             return losses
         else:
+            z['hm'] = torch.clamp(z['hm'].sigmoid_(), min=1e-4, max=1-1e-4)
             results = self.inference(z, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
