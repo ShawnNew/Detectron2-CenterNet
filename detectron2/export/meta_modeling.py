@@ -176,7 +176,11 @@ class CenterNetModel(MetaModel):
         assert isinstance(self._wrapped_model, meta_arch.CenterNet)
         images = inputs['images']
         features = self._wrapped_model.backbone(images)
-        y = self._wrapped_model.deconv_layers(features['res4'])
+        backbone_type = self._wrapped_model.backbone_type
+        if backbone_type == 'resnet':
+            y = self._wrapped_model.deconv_layers(features['res4'])
+        elif backbone_type == 'vovnet':
+            y = self._wrapped_model.deconv_layers(features['stage4'])
         results = {}
         for head in self._wrapped_model.heads:
             head = head.lower()

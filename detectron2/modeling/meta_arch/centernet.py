@@ -67,11 +67,13 @@ class CenterNet(nn.Module):
         # self modules
         self.backbone_type = backbone_type.split('_')[1]
         self.backbone = build_backbone(cfg)
-        if self.backbone_type == 'resnet':
+        if self.backbone_type == 'resnet' or self.backbone_type == 'vovnet':
             self.backbone.down_ratio = 4
             self.size_divisibility = 16
             self.deconv_layers = self._make_deconv_layer(
-                self.backbone._out_feature_channels['res4'],
+                self.backbone._out_feature_channels['res4'] if \
+                self.backbone_type == 'resnet' else \
+                self.backbone._out_feature_channels['stage4'],
                 2,
                 [256, 256],
                 [4, 4],
@@ -86,6 +88,10 @@ class CenterNet(nn.Module):
                         nn.ReLU(inplace=True),
                         nn.Conv2d(head_conv, num_output,
                                   kernel_size=1, stride=1, padding=0))
+                    if 'hm' in head.lower():
+                        fc[-1].bias.data.fill_(-2.19)
+                    else:
+                        fill_fc_weights(fc)
                 else:
                     fc = nn.Conv2d(
                         in_channels=256,
@@ -94,8 +100,12 @@ class CenterNet(nn.Module):
                         stride=1,
                         padding=0
                     )
+                    if 'hm' in head.lower():
+                        fc[-1].bias.data.fill_(-2.19)
+                    else:
+                        fill_fc_weights(fc)
                 self.__setattr__(head.lower(), fc)
-            self.init_weights(50)
+            if self.backbone_type == 'resnet': self.init_weights(50)
             return
 
         self.size_divisibility = self.backbone.size_divisibility
@@ -130,7 +140,13 @@ class CenterNet(nn.Module):
     def forward(self, batched_inputs):
         images, instances = self.preprocess_image(batched_inputs)
         y = self.backbone(images.tensor)
-        y = y[-1] if not self.backbone_type == 'resnet' else self.deconv_layers(y['res4'])
+        if self.backbone_type == 'resnet':
+            y = self.deconv_layers(y['res4'])
+        elif self.backbone_type == 'vovnet':
+            y = self.deconv_layers(y['stage4'])
+        else:
+            y = y[-1]
+        # y = y[-1] if not self.backbone_type == 'resnet' else self.deconv_layers(y['res4'])
 
         z = {}
         for head in self.heads:
