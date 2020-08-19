@@ -4,7 +4,7 @@ MODEL:
     FOCAL_LOSS_ALPHA: [1]
 DATASETS:
   TRAIN: ("sz_sh_bulb_train",)
-  TEST: ("sh_bulb_train",)
+  TEST: ("sz_sh_bulb_val",)
 INPUT:
   FORMAT: "RGB"
   MIN_SIZE_TRAIN: (640, 672, 704, 736, 768, 800)
