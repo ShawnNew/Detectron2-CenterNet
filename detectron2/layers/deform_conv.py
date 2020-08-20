@@ -10,7 +10,7 @@ from torch.nn.modules.utils import _pair
 from detectron2 import _C
 
 from .wrappers import _NewEmptyTensorOp
-from .DCNv2.dcn_v2 import DCN
+# from .DCNv2.dcn_v2 import DCN
 
 
 class _DeformConv(Function):
