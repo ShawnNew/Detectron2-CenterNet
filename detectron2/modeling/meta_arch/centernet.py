@@ -71,12 +71,12 @@ class CenterNet(nn.Module):
             self.backbone.down_ratio = 4
             self.size_divisibility = 8
             self.deconv_layers = self._make_deconv_layer(
-                self.backbone._out_feature_channels['res3'] if \
+                self.backbone._out_feature_channels['res4'] if \
                 self.backbone_type == 'resnet' else \
-                self.backbone._out_feature_channels['stage3'],
-                1,
-                [256,],
-                [4,],
+                self.backbone._out_feature_channels['stage4'],
+                2,
+                [256, 256],
+                [4, 4],
             )
 
             for head in sorted(self.heads):
@@ -141,9 +141,9 @@ class CenterNet(nn.Module):
         images, instances = self.preprocess_image(batched_inputs)
         y = self.backbone(images.tensor)
         if self.backbone_type == 'resnet':
-            y = self.deconv_layers(y['res3'])
+            y = self.deconv_layers(y['res4'])
         elif self.backbone_type == 'vovnet':
-            y = self.deconv_layers(y['stage3'])
+            y = self.deconv_layers(y['stage4'])
         else:
             y = y[-1]
         # y = y[-1] if not self.backbone_type == 'resnet' else self.deconv_layers(y['res4'])
