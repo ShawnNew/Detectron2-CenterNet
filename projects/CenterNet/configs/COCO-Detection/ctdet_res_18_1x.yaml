@@ -6,7 +6,7 @@ MODEL:
     FOCAL_LOSS_ALPHA: [1]
     HEAD_CONV: 64
   RESNETS:
-    DEPTH: 34
+    DEPTH: 18
     RES2_OUT_CHANNELS: 64
 DATASETS:
   TRAIN: ("sz_sh_bulb_train",)

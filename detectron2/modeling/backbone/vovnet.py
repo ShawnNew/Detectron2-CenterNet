@@ -158,6 +158,25 @@ def conv1x1(
         (f"{module_name}_{postfix}/relu", nn.ReLU(inplace=True)),
     ]
 
+class _Expand(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, value, shape=None, device=None):
+        if shape:
+            return torch.tensor(value).expand(shape).to(device=device)
+        else:
+            return value
+    @staticmethod
+    def backward(ctx, grad_output):
+        raise NotImplementedError("Backward is not supported!")
+    @staticmethod
+    def symbolic(g, value, shape=None, device=None):
+        if shape:
+            value_t = torch.tensor(value).expand(shape).to(device=device)
+        else:
+            # not supported
+            value_t = value
+        return g.op("Constant", value_t=torch.tensor(value_t))
+expand = _Expand.apply
 
 class Hsigmoid(nn.Module):
     def __init__(self, inplace=True):
@@ -165,7 +184,11 @@ class Hsigmoid(nn.Module):
         self.inplace = inplace
 
     def forward(self, x):
-        return F.relu6(x + 3.0, inplace=self.inplace) / 6.0
+        bias = expand(3., x.shape, x.device)
+        scale = expand(6., x.shape, x.device)
+        return F.relu6(x + bias, inplace=self.inplace) / scale
+
+        # return F.relu6(x + 3.0, inplace=self.inplace) / 6.0
 
 
 class eSEModule(nn.Module):

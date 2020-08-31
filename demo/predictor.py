@@ -22,7 +22,7 @@ class VisualizationDemo(object):
                 Useful since the visualization logic can be slow.
         """
         self.metadata = MetadataCatalog.get(
-            cfg.DATASETS.TEST[0] if len(cfg.DATASETS.TEST) else "__unused"
+            cfg.DATASETS.TRAIN[0] if len(cfg.DATASETS.TRAIN) else "__unused"
         )
         self.cpu_device = torch.device("cpu")
         self.instance_mode = instance_mode
