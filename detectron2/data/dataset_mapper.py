@@ -69,7 +69,7 @@ class DatasetMapper:
             assert use_instance_mask, "recompute_boxes requires instance masks"
         # fmt: off
         self.is_train               = is_train
-        self.augmentations          = augmentations
+        self.augmentations          = T.AugmentationList(augmentations)
         self.image_format           = image_format
         self.use_instance_mask      = use_instance_mask
         self.instance_mask_format   = instance_mask_format
@@ -129,8 +129,8 @@ class DatasetMapper:
         else:
             sem_seg_gt = None
 
-        aug_input = T.StandardAugInput(image, sem_seg=sem_seg_gt)
-        transforms = aug_input.apply_augmentations(self.augmentations)
+        aug_input = T.AugInput(image, sem_seg=sem_seg_gt)
+        transforms = self.augmentations(aug_input)
         image, sem_seg_gt = aug_input.image, aug_input.sem_seg
 
         image_shape = image.shape[:2]  # h, w

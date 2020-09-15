@@ -273,11 +273,14 @@ def register_all_bulb_tl(root):
                 os.path.join(root, image_root),
             )
 
-# Register them all under "./datasets"
-_root = os.getenv("DETECTRON2_DATASETS", "datasets")
-register_all_coco(_root)
-register_all_lvis(_root)
-register_all_cityscapes(_root)
-register_all_pascal_voc(_root)
-register_all_lisa_coco(_root)
-register_all_bulb_tl(_root)
+# True for open source;
+# Internally at fb, we register them elsewhere
+if __name__.endswith(".builtin"):
+    # Register them all under "./datasets"
+    _root = os.getenv("DETECTRON2_DATASETS", "datasets")
+    register_all_coco(_root)
+    register_all_lvis(_root)
+    register_all_cityscapes(_root)
+    register_all_pascal_voc(_root)
+    register_all_lisa_coco(_root)
+    register_all_bulb_tl(_root)

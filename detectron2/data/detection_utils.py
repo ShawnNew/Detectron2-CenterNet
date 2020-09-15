@@ -35,6 +35,7 @@ __all__ = [
     "annotations_to_instances",
     "annotations_to_instances_rotated",
     "build_augmentation",
+    "build_transform_gen",
     "create_keypoint_hflip_indices",
     "filter_empty_instances",
     "read_image",
@@ -137,7 +138,10 @@ def _apply_exif_orientation(image):
     if not hasattr(image, "getexif"):
         return image
 
-    exif = image.getexif()
+    try:
+        exif = image.getexif()
+    except Exception:  # https://github.com/facebookresearch/detectron2/issues/1885
+        exif = None
 
     if exif is None:
         return image
@@ -177,7 +181,6 @@ def read_image(file_name, format=None):
 
         # work around this bug: https://github.com/python-pillow/Pillow/issues/3973
         image = _apply_exif_orientation(image)
-
         return convert_PIL_to_numpy(image, format)
 
 
@@ -375,7 +378,7 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
     target = Instances(image_size)
     target.gt_boxes = Boxes(boxes)
 
-    classes = [obj["category_id"] for obj in annos]
+    classes = [int(obj["category_id"]) for obj in annos]
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_classes = classes
 
@@ -576,15 +579,21 @@ def build_augmentation(cfg, is_train):
         min_size = cfg.INPUT.MIN_SIZE_TEST
         max_size = cfg.INPUT.MAX_SIZE_TEST
         sample_style = "choice"
-    if cfg.INPUT.DYNAMIC:
-        augmentation = [T.ResizeShortestEdge(min_size, max_size, sample_style)]
-    else:
-        augmentation = [T.ResizeLetterBox(min_size, max_size, sample_style)]
-    if is_train:
-        augmentation.append(T.RandomFlip())
-    logger = logging.getLogger(__name__)
-    logger.info("Augmentations: " + str(augmentation))
+    augmentation = [T.ResizeShortestEdge(min_size, max_size, sample_style)]
+    if is_train and cfg.INPUT.RANDOM_FLIP != "none":
+        augmentation.append(
+            T.RandomFlip(
+                horizontal=cfg.INPUT.RANDOM_FLIP == "horizontal",
+                vertical=cfg.INPUT.RANDOM_FLIP == "vertical",
+            )
+        )
     return augmentation
+
+
+build_transform_gen = build_augmentation
+"""
+Alias for backward-compatibility.
+"""
 
 
 def gen_heatmap(instances, output_shape, meta):

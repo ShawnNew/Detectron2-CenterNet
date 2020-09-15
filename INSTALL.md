@@ -35,23 +35,31 @@ old build first. You often need to rebuild detectron2 after reinstalling PyTorch
 
 Choose from this table:
 
-<table class="docutils"><tbody><th width="80"> CUDA </th><th valign="bottom" align="left" width="100">torch 1.5</th><th valign="bottom" align="left" width="100">torch 1.4</th> <tr><td align="left">10.2</td><td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
+<table class="docutils"><tbody><th width="80"> CUDA </th><th valign="bottom" align="left" width="100">torch 1.6</th><th valign="bottom" align="left" width="100">torch 1.5</th><th valign="bottom" align="left" width="100">torch 1.4</th> <tr><td align="left">10.2</td><td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
+  https://dl.fbaipublicfiles.com/detectron2/wheels/cu102/torch1.6/index.html
+</code></pre> </details> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cu102/torch1.5/index.html
 </code></pre> </details> </td> <td align="left"> </td> </tr> <tr><td align="left">10.1</td><td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
+  https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.6/index.html
+</code></pre> </details> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.5/index.html
 </code></pre> </details> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.4/index.html
-</code></pre> </details> </td> </tr> <tr><td align="left">10.0</td><td align="left"> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
+</code></pre> </details> </td> </tr> <tr><td align="left">10.0</td><td align="left"> </td> <td align="left"> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cu100/torch1.4/index.html
 </code></pre> </details> </td> </tr> <tr><td align="left">9.2</td><td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
+  https://dl.fbaipublicfiles.com/detectron2/wheels/cu92/torch1.6/index.html
+</code></pre> </details> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cu92/torch1.5/index.html
 </code></pre> </details> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cu92/torch1.4/index.html
 </code></pre> </details> </td> </tr> <tr><td align="left">cpu</td><td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
+  https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.6/index.html
+</code></pre> </details> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.5/index.html
 </code></pre> </details> </td> <td align="left"><details><summary> install </summary><pre><code>python -m pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.4/index.html
-</code></pre> </details> </td> </tr></tbody></table>
+  </code></pre> </details> </td> </tr></tbody></table>
 
 
 Note that:
@@ -67,7 +75,7 @@ Click each issue for its solutions:
 
 <details>
 <summary>
-Undefined symbols that contains TH,aten,torch,caffe2; missing torch dynamic libraries; segmentation fault immediately when using detectron2.
+Undefined symbols that contains TH,aten,torch,caffe2; Missing torch dynamic libraries; Segmentation fault immediately when using detectron2.
 </summary>
 <br/>
 
@@ -105,7 +113,7 @@ One way is to use `LD_PRELOAD=/path/to/libstdc++.so`.
 
 <details>
 <summary>
-"Not compiled with GPU support" or "Detectron2 CUDA Compiler: not available".
+"nvcc not found" or "Not compiled with GPU support" or "Detectron2 CUDA Compiler: not available".
 </summary>
 <br/>
 CUDA is not found when building detectron2.
@@ -115,7 +123,7 @@ You should make sure
 python -c 'import torch; from torch.utils.cpp_extension import CUDA_HOME; print(torch.cuda.is_available(), CUDA_HOME)'
 ```
 
-print valid outputs at the time you build detectron2.
+print `(True, a directory with cuda)` at the time you build detectron2.
 
 Most models can run inference (but not training) without GPU support. To use CPUs, set `MODEL.DEVICE='cpu'` in the config.
 </details>
@@ -138,25 +146,25 @@ Two possibilities:
   you need to either install a different build of PyTorch (or build by yourself)
   to match your local CUDA installation, or install a different version of CUDA to match PyTorch.
 
-* PyTorch/torchvision/Detectron2 is not built for the correct GPU architecture (aka. compute compatibility).
+* PyTorch/torchvision/Detectron2 is not built for the correct GPU architecture (aka. compute capability).
 
-  The compute compatibility included by PyTorch/detectron2/torchvision is available in the "architecture flags" in
+  The architecture included by PyTorch/detectron2/torchvision is available in the "architecture flags" in
   `python -m detectron2.utils.collect_env`. It must include
-  the compute compatibility of your GPU, which can be found at [developer.nvidia.com/cuda-gpus](https://developer.nvidia.com/cuda-gpus).
+  the architecture of your GPU, which can be found at [developer.nvidia.com/cuda-gpus](https://developer.nvidia.com/cuda-gpus).
 
   If you're using pre-built PyTorch/detectron2/torchvision, they have included support for most popular GPUs already.
   If not supported, you need to build them from source.
 
   When building detectron2/torchvision from source, they detect the GPU device and build for only the device.
   This means the compiled code may not work on a different GPU device.
-  To recompile them for the correct compatiblity, remove all installed/compiled files,
+  To recompile them for the correct architecture, remove all installed/compiled files,
   and rebuild them with the `TORCH_CUDA_ARCH_LIST` environment variable set properly.
   For example, `export TORCH_CUDA_ARCH_LIST=6.0,7.0` makes it compile for both P100s and V100s.
 </details>
 
 <details>
 <summary>
-Undefined CUDA symbols; cannot open libcudart.so
+Undefined CUDA symbols; Cannot open libcudart.so
 </summary>
 <br/>
 The version of NVCC you use to build detectron2 or torchvision does
@@ -181,7 +189,9 @@ C++ compilation errors from NVCC
 1. NVCC version has to match the CUDA version of your PyTorch.
 
 2. NVCC has compatibility issues with certain versions of gcc. You sometimes need a different
-   version of gcc. The version used by PyTorch can be found by `print(torch.__config__.show())`.
+   version of gcc.
+
+The CUDA/gcc version used by PyTorch can be found by `print(torch.__config__.show())`.
 </details>
 
 
@@ -203,9 +213,8 @@ Any issue on windows.
 </summary>
 <br/>
 
-Although detectron2 can be installed on windows with some effort (similar to [these](https://github.com/facebookresearch/pytorch3d/blob/master/INSTALL.md#2-install-from-a-local-clone)),
-we do not provide official support for it.
-
+Detectron2 is continuously built on windows with [CircleCI](https://app.circleci.com/pipelines/github/facebookresearch/detectron2?branch=master).
+However we do not provide official support for it.
 PRs that improves code compatibility on windows are welcome.
 </details>
 

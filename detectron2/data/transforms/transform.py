@@ -109,6 +109,8 @@ class ResizeTransform(Transform):
             ret = np.asarray(pil_image)
         else:
             # PIL only supports uint8
+            if any(x < 0 for x in img.strides):
+                img = np.ascontiguousarray(img)
             img = torch.from_numpy(img)
             shape = list(img.shape)
             shape_4d = shape[:2] + [1] * (4 - len(shape)) + shape[2:]
@@ -246,6 +248,9 @@ class ColorTransform(Transform):
 
     def apply_coords(self, coords):
         return coords
+
+    def inverse(self):
+        return NoOpTransform()
 
     def apply_segmentation(self, segmentation):
         return segmentation
