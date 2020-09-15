@@ -69,7 +69,7 @@ class CenterNet(nn.Module):
         self.backbone = build_backbone(cfg)
         if self.backbone_type == 'resnet' or self.backbone_type == 'vovnet':
             self.backbone.down_ratio = 4
-            self.size_divisibility = 8
+            self.size_divisibility = 16
             self.deconv_layers = self._make_deconv_layer(
                 self.backbone._out_feature_channels['res4'] if \
                 self.backbone_type == 'resnet' else \
@@ -411,11 +411,11 @@ def _topk(scores, K=40):
     topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
 
     topk_inds = topk_inds % (height * width)
-    topk_ys = (topk_inds / width).int().float()
+    topk_ys = (topk_inds // width).int().float()
     topk_xs = (topk_inds % width).int().float()
 
     topk_score, topk_ind = torch.topk(topk_scores.view(batch, -1), K)
-    topk_clses = (topk_ind / K).int()
+    topk_clses = (topk_ind // K).int()
     topk_inds = _gather_feat(
         topk_inds.view(batch, -1, 1), topk_ind).view(batch, K)
     topk_ys = _gather_feat(topk_ys.view(batch, -1, 1), topk_ind).view(batch, K)

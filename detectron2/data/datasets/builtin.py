@@ -257,7 +257,8 @@ _PREDEFINED_TRAFFIC_LIGHT["bulb_wise_tl"] = {
     # "bulb_wise_tl_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val2020.json"),
     "tl_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_tl_bulb.json"),
     "tl_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_tl.json"),
-    "sz_sh_bulb_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val_split_2020_bulb.json")
+    "sz_sh_bulb_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val_split_2020_bulb.json"),
+    "bulb_train_all": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_bulb.json")
 }
 
 def register_all_bulb_tl(root):
