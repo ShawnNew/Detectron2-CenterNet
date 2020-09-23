@@ -300,7 +300,7 @@ class TensorRTCenterNet(TensorRTModel, CenterNetModel):
         ns = types.SimpleNamespace()
         ns.training = False
         ns.input = cfg.INPUT
-        ns.dynamic = cfg.INPUT.DYNAMIC
+        # ns.dynamic = cfg.INPUT.DYNAMIC
         ns.device = torch.device(cfg.MODEL.DEVICE)
         ns.pixel_mean = torch.tensor(cfg.MODEL.PIXEL_MEAN).view(-1, 1, 1).to(ns.device)
         ns.pixel_std = torch.tensor(cfg.MODEL.PIXEL_STD).view(-1, 1, 1).to(ns.device)

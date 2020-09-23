@@ -251,14 +251,17 @@ def register_all_lisa_coco(root):
 # == Predefined bulb-wise traffic light ===
 _PREDEFINED_TRAFFIC_LIGHT = {}
 _PREDEFINED_TRAFFIC_LIGHT["bulb_wise_tl"] = {
-    "sz_sh_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train_split_2020_bulb.json"),
-    "sh_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/sh_train2020_bulb.json"),
-    "sz_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/sz_train2020_bulb.json"),
-    # "bulb_wise_tl_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val2020.json"),
     "tl_bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_tl_bulb.json"),
     "tl_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_tl.json"),
-    "sz_sh_bulb_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val_split_2020_bulb.json"),
-    "bulb_train_all": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_bulb.json")
+    "bulb_train": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train_split_2020_bulb.json"),
+    "bulb_val": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/val_split_2020_bulb.json"),
+    "bulb": ("traffic_light_bulb/images", "traffic_light_bulb/annotations/train2020_bulb.json"),
+    "class_agnostic_bulb_train": ("traffic_light_bulb/images",
+                                  "traffic_light_bulb/annotations/class_agnostic_train_split_2020_bulb.json"),
+    "class_agnostic_bulb_val": ("traffic_light_bulb/images",
+                                  "traffic_light_bulb/annotations/class_agnostic_val_split_2020_bulb.json"),
+    "class_agnostic_bulb": ("traffic_light_bulb/images",
+                                  "traffic_light_bulb/annotations/class_agnostic_train2020_bulb.json"),
 }
 
 def register_all_bulb_tl(root):
