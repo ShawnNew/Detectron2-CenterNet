@@ -40,6 +40,7 @@ __all__ = [
     "filter_empty_instances",
     "read_image",
     "gen_heatmap",
+    "mixup_data",
 ]
 
 
@@ -702,3 +703,19 @@ def draw_umich_gaussian(heatmap, center, radius, k=1):
     if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:  # TODO debug
         np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
     return heatmap
+
+def mixup_data(x, alpha=1.0, beta=1.0, use_cuda=True):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0 and beta > 0:
+        lam = np.random.beta(alpha, beta)
+    else:
+        lam = 1
+
+    batch_size = x.size()[0]
+    if use_cuda:
+        index = torch.randperm(batch_size).cuda()
+    else:
+        index = torch.randperm(batch_size)
+
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+    return mixed_x

@@ -9,7 +9,7 @@ from ..postprocessing import detector_postprocess
 from ..backbone import DLAUp, IDAUp, build_backbone
 from .build import META_ARCH_REGISTRY
 from detectron2.data.catalog import MetadataCatalog, DatasetCatalog
-from detectron2.data.detection_utils import gen_heatmap
+from detectron2.data.detection_utils import gen_heatmap, mixup_data
 import torch.utils.model_zoo as model_zoo
 
 

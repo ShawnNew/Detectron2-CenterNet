@@ -8,9 +8,10 @@ MODEL:
   RESNETS:
     DEPTH: 18
     RES2_OUT_CHANNELS: 64
+    NORM: "SyncBN"
 DATASETS:
-  TRAIN: ("bulb_train",)
-  TEST: ("bulb_val",)
+  TRAIN: ("class_agnostic_bulb_train",)
+  TEST: ("class_agnostic_bulb_val",)
 INPUT:
   FORMAT: "RGB"
   MAX_SIZE_TRAIN: 1920
@@ -19,8 +20,8 @@ INPUT:
   MIN_SIZE_TEST: 1056
 SOLVER:
   IMS_PER_BATCH: 24
+  LR_SCHEDULER_NAME: "WarmupCosineLR"
   BASE_LR: 2.5e-4
-  STEPS: (136500, 273000)
   MAX_ITER: 364000
   CHECKPOINT_PERIOD: 3640
 TEST:
