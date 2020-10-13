@@ -89,7 +89,7 @@ if __name__ == "__main__":
         for input_path in input_path_list:
             if input_path.is_file(): input_images_list.append(str(input_path))
             if input_path.is_dir():
-                input_images_list.extend([str(x) for x in input_path.glob('*.jpg')])
+                input_images_list.extend([str(x) for x in sorted(input_path.glob('*.jpg'))])
         for path in tqdm.tqdm(input_images_list, disable=not args.output):
             # use PIL, to be consistent with evaluation
             img = read_image(path, format="BGR")
