@@ -1,0 +1,27 @@
+_BASE_: "../Base-RetinaNet.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  RESNETS:
+    DEPTH: 50
+  RETINANET:
+    NUM_CLASSES: 18
+DATASETS:
+  TRAIN: ("bulb_train",)
+  TEST: ("bulb_val",)
+INPUT:
+  FORMAT: "RGB"
+  DYNAMIC: true
+#  MAX_SIZE_TRAIN: 1920
+#  MIN_SIZE_TRAIN: (672, 736, 800, 864, 928, 992, 1056)
+#  MAX_SIZE_TEST: 1920
+#  MIN_SIZE_TEST: 1056
+SOLVER:
+  IMS_PER_BATCH: 24
+  LR_SCHEDULER_NAME: "WarmupCosineLR"
+  BASE_LR: 2.5e-4
+  MAX_ITER: 364000
+  CHECKPOINT_PERIOD: 3640
+TEST:
+  EVAL_PERIOD: 1820
+OUTPUT_DIR: "./output/retinanet_r50_bot"
+VERSION: 2
