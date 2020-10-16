@@ -6,7 +6,7 @@ from collections import deque
 import cv2
 import torch
 
-from detectron2.data import MetadataCatalog
+from detectron2.data import MetadataCatalog, DatasetCatalog
 from detectron2.engine.defaults import DefaultPredictor
 from detectron2.utils.video_visualizer import VideoVisualizer
 from detectron2.utils.visualizer import ColorMode, Visualizer
@@ -21,6 +21,9 @@ class VisualizationDemo(object):
             parallel (bool): whether to run the model in different processes from visualization.
                 Useful since the visualization logic can be slow.
         """
+        DatasetCatalog.get(
+            cfg.DATASETS.TRAIN[0] if len(cfg.DATASETS.TRAIN) else "__unused"
+        )
         self.metadata = MetadataCatalog.get(
             cfg.DATASETS.TRAIN[0] if len(cfg.DATASETS.TRAIN) else "__unused"
         )
